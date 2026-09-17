@@ -110,10 +110,28 @@ def init_db():
     )
     """)
 
+    # 4. 보안 감사 및 접속 로그 테이블 (신규 요구사항 5)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS access_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        emp_id TEXT NOT NULL,
+        user_name TEXT,
+        action_type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        ip_address TEXT,
+        user_agent TEXT,
+        details TEXT,
+        created_at TEXT NOT NULL
+    )
+    """)
+
     # 인덱스 생성
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_overtimes_emp ON overtimes(emp_id);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_overtimes_date ON overtimes(start_date, end_date);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_overtime ON overtime_history(overtime_id);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_emp ON access_logs(emp_id);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_created ON access_logs(created_at);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_status ON access_logs(status);")
 
     # 대체휴일 사용 및 보너스 부여 컬럼 마이그레이션 (기존 DB 안전 업그레이드)
     cursor.execute("PRAGMA table_info(overtimes);")
@@ -217,3 +235,27 @@ def log_audit(overtime_id: int, action: str, changed_by: str, changed_by_name: s
     ))
     conn.commit()
     conn.close()
+
+def log_access_event(emp_id: str, user_name: str = None, action_type: str = "LOGIN", status: str = "SUCCESS", ip_address: str = "", user_agent: str = "", details: str = ""):
+    """사용자 로그인 시도, 등록, 접속 감사 로그 기록 (신규 요구사항 5)"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("""
+        INSERT INTO access_logs (emp_id, user_name, action_type, status, ip_address, user_agent, details, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            emp_id or "",
+            user_name or "",
+            action_type,
+            status,
+            ip_address or "",
+            user_agent or "",
+            details or "",
+            now_str
+        ))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[Access Log Error] {e}")

@@ -16,7 +16,7 @@ import qrcode
 
 from database import (
     init_db, get_db_connection, log_audit, create_backup, DB_PATH,
-    get_all_teams, create_team, delete_team
+    get_all_teams, create_team, delete_team, log_access_event
 )
 from schemas import (
     UserLoginRequest, UserRegisterRequest, UserUpdateRequest,
@@ -33,16 +33,23 @@ STATIC_DIR = BASE_DIR / "static"
 WEB_BACKUP_DIR = BASE_DIR / "data" / "web_backups"
 WEB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Team Overtime Manager", version="1.3.3")
+app = FastAPI(title="Team Overtime Manager", version="1.3.6")
 
 def validate_emp_id(emp_id: str):
-    """사원번호 유효성 검증: 슈퍼관리자(ps37082) 제외 숫자 6자리 필수"""
-    emp_id = emp_id.strip()
-    if emp_id.lower() == "ps37082":
-        return True
-    if len(emp_id) != 6 or not emp_id.isdigit():
-        raise HTTPException(status_code=400, detail="사원번호는 6자리 숫자여야 합니다. (예: 123456)")
+    """사원번호 유효성 검증 (보안 강화: 자릿수 힌트 완전 제거)"""
+    emp_id = (emp_id or "").strip()
+    if not emp_id:
+        raise HTTPException(status_code=400, detail="사원번호를 올바르게 입력해 주세요.")
     return True
+
+def get_client_ip(request: Request) -> str:
+    """클라이언트 실제 IP 추출 (프록시 X-Forwarded-For 대응)"""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    if request.client and request.client.host:
+        return request.client.host
+    return "127.0.0.1"
 
 # CORS 활성화 (모바일 및 외부 환경 접속 지원)
 app.add_middleware(
@@ -121,13 +128,17 @@ def get_system_info(custom_url: Optional[str] = None):
 # ----------------- 사용자 및 인증 API -----------------
 
 @app.post("/api/users/login")
-def login_user(req: UserLoginRequest):
-    """사번으로 회원 조회 및 로그인"""
-    emp_id = req.emp_id.strip()
-    if not emp_id:
-        raise HTTPException(status_code=400, detail="사번을 입력해주세요.")
+def login_user(req: UserLoginRequest, request: Request):
+    """사번으로 회원 조회 및 로그인 (보안 접속 감사 로그 기록)"""
+    emp_id = (req.emp_id or "").strip()
+    client_ip = get_client_ip(request)
+    ua = request.headers.get("User-Agent", "")[:250]
 
-    # 사원번호 유효성 검사 (ps37082 제외 6자리 숫자 필수)
+    if not emp_id:
+        log_access_event(emp_id="", action_type="LOGIN", status="FAILURE", ip_address=client_ip, user_agent=ua, details="빈 사원번호 입력")
+        raise HTTPException(status_code=400, detail="사원번호를 입력해 주세요.")
+
+    # 사원번호 유효성 검사 (6자리 힌트 제거)
     validate_emp_id(emp_id)
 
     conn = get_db_connection()
@@ -138,23 +149,44 @@ def login_user(req: UserLoginRequest):
 
     if row:
         user_dict = dict(row)
+        log_access_event(
+            emp_id=emp_id,
+            user_name=user_dict.get("name"),
+            action_type="LOGIN",
+            status="SUCCESS",
+            ip_address=client_ip,
+            user_agent=ua,
+            details=f"로그인 성공 ({user_dict.get('team')}, {user_dict.get('position')})"
+        )
         return {"exists": True, "user": user_dict}
     else:
+        log_access_event(
+            emp_id=emp_id,
+            user_name=None,
+            action_type="LOGIN",
+            status="FAILURE",
+            ip_address=client_ip,
+            user_agent=ua,
+            details="미등록 사원번호 로그인 시도"
+        )
         return {"exists": False, "emp_id": emp_id}
 
 @app.post("/api/users/register")
-def register_user(req: UserRegisterRequest):
-    """신규 팀원(사번) 등록"""
-    emp_id = req.emp_id.strip()
-    name = req.name.strip()
-    team = req.team.strip()
+def register_user(req: UserRegisterRequest, request: Request):
+    """신규 팀원(사번) 등록 (감사 로그 기록)"""
+    emp_id = (req.emp_id or "").strip()
+    name = (req.name or "").strip()
+    team = (req.team or "").strip()
     position = (req.position or "팀원").strip()
     is_admin = 1 if req.is_admin else 0
+    client_ip = get_client_ip(request)
+    ua = request.headers.get("User-Agent", "")[:250]
 
     if not emp_id or not name or not team:
-        raise HTTPException(status_code=400, detail="사번, 이름, 소속팀은 필수 입력값입니다.")
+        log_access_event(emp_id=emp_id, user_name=name, action_type="REGISTER", status="FAILURE", ip_address=client_ip, user_agent=ua, details="필수값(사번/이름/팀) 누락 등록 시도")
+        raise HTTPException(status_code=400, detail="사원번호, 이름, 소속팀은 필수 입력값입니다.")
 
-    # 사원번호 6자리 유효성 검사 (ps37082 제외)
+    # 사원번호 유효성 검사 (6자리 힌트 제거)
     validate_emp_id(emp_id)
 
     # 슈퍼관리자 사번인 경우 자동 슈퍼관리자 권한
@@ -170,7 +202,8 @@ def register_user(req: UserRegisterRequest):
     cursor.execute("SELECT * FROM users WHERE emp_id = ?", (emp_id,))
     if cursor.fetchone():
         conn.close()
-        raise HTTPException(status_code=400, detail="이미 등록된 사번입니다.")
+        log_access_event(emp_id=emp_id, user_name=name, action_type="REGISTER", status="FAILURE", ip_address=client_ip, user_agent=ua, details="이미 등록된 사원번호 중복 등록 시도")
+        raise HTTPException(status_code=400, detail="이미 등록된 사원번호입니다.")
 
     cursor.execute("""
     INSERT INTO users (emp_id, name, team, position, is_admin, is_super, created_at)
@@ -181,7 +214,33 @@ def register_user(req: UserRegisterRequest):
     cursor.execute("SELECT * FROM users WHERE emp_id = ?", (emp_id,))
     new_user = dict(cursor.fetchone())
     conn.close()
+
+    log_access_event(
+        emp_id=emp_id,
+        user_name=name,
+        action_type="REGISTER",
+        status="SUCCESS",
+        ip_address=client_ip,
+        user_agent=ua,
+        details=f"신규 사원 등록 완료 ({team}, {position})"
+    )
     return {"message": "등록되었습니다.", "user": new_user}
+
+@app.post("/api/users/logout")
+def logout_user(req: UserLoginRequest, request: Request):
+    """사용자 로그아웃 감사 로그 기록"""
+    emp_id = (req.emp_id or "").strip()
+    client_ip = get_client_ip(request)
+    ua = request.headers.get("User-Agent", "")[:250]
+    log_access_event(
+        emp_id=emp_id,
+        action_type="LOGOUT",
+        status="SUCCESS",
+        ip_address=client_ip,
+        user_agent=ua,
+        details="사용자 로그아웃"
+    )
+    return {"status": "ok"}
 
 @app.get("/api/users/{emp_id}/latest-overtime")
 def get_latest_overtime(emp_id: str):
@@ -1462,6 +1521,251 @@ def load_web_backup(req: BackupLoadRequest):
     }
 
 
+# ----------------- 슈퍼관리자 전용 보안 감사 및 접속 로그 API (신규 요구사항 5) -----------------
+
+@app.get("/api/admin/access-logs")
+def get_access_logs(
+    admin_emp_id: str = Query(..., description="조회 요청자의 사원번호"),
+    start_date: Optional[str] = Query(None, description="시작일 (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="종료일 (YYYY-MM-DD)"),
+    action_type: Optional[str] = Query(None, description="액션 타입 (LOGIN, REGISTER, LOGOUT 등)"),
+    status: Optional[str] = Query(None, description="상태 (SUCCESS, FAILURE)"),
+    search: Optional[str] = Query(None, description="사번, 이름, IP 검색어"),
+    limit: int = Query(300, description="최대 조회 건수")
+):
+    """슈퍼관리자 전용 보안 감사 및 접속 로그 조회"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 슈퍼관리자 권한 확인
+    cursor.execute("SELECT is_super FROM users WHERE emp_id = ?", (admin_emp_id.strip(),))
+    admin_row = cursor.fetchone()
+    if not admin_row or int(admin_row["is_super"] or 0) != 1:
+        conn.close()
+        raise HTTPException(status_code=403, detail="슈퍼관리자만 접근 가능한 보안 로그입니다.")
+
+    # 1. 오늘 날짜 기준 통계 요약 산출
+    today_prefix = datetime.now().strftime("%Y-%m-%d")
+    cursor.execute("SELECT COUNT(*) as total_cnt FROM access_logs")
+    total_cnt = cursor.fetchone()["total_cnt"]
+
+    cursor.execute("SELECT COUNT(*) as today_cnt FROM access_logs WHERE created_at LIKE ?", (f"{today_prefix}%",))
+    today_cnt = cursor.fetchone()["today_cnt"]
+
+    cursor.execute("SELECT COUNT(*) as today_fail FROM access_logs WHERE status = 'FAILURE' AND created_at LIKE ?", (f"{today_prefix}%",))
+    today_fail = cursor.fetchone()["today_fail"]
+
+    cursor.execute("SELECT COUNT(*) as today_reg FROM access_logs WHERE action_type = 'REGISTER' AND status = 'SUCCESS' AND created_at LIKE ?", (f"{today_prefix}%",))
+    today_reg = cursor.fetchone()["today_reg"]
+
+    # 2. 동적 쿼리 구성
+    where_clauses = ["1=1"]
+    params = []
+
+    if start_date:
+        where_clauses.append("created_at >= ?")
+        params.append(f"{start_date.strip()} 00:00:00")
+    if end_date:
+        where_clauses.append("created_at <= ?")
+        params.append(f"{end_date.strip()} 23:59:59")
+    if action_type and action_type.strip():
+        where_clauses.append("action_type = ?")
+        params.append(action_type.strip().upper())
+    if status and status.strip():
+        where_clauses.append("status = ?")
+        params.append(status.strip().upper())
+    if search and search.strip():
+        s = f"%{search.strip()}%"
+        where_clauses.append("(emp_id LIKE ? OR user_name LIKE ? OR ip_address LIKE ? OR details LIKE ?)")
+        params.extend([s, s, s, s])
+
+    query = f"""
+        SELECT id, emp_id, user_name, action_type, status, ip_address, user_agent, details, created_at
+        FROM access_logs
+        WHERE {' AND '.join(where_clauses)}
+        ORDER BY id DESC
+        LIMIT ?
+    """
+    params.append(limit)
+
+    cursor.execute(query, tuple(params))
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    return {
+        "status": "success",
+        "stats": {
+            "total_logs": total_cnt,
+            "today_total": today_cnt,
+            "today_failed": today_fail,
+            "today_registered": today_reg
+        },
+        "logs": rows
+    }
+
+
+@app.get("/api/admin/access-logs/export")
+def export_access_logs(
+    admin_emp_id: str = Query(..., description="조회 요청자의 사원번호"),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    action_type: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    search: Optional[str] = Query(None)
+):
+    """슈퍼관리자 전용 보안 감사 로그 엑셀 다운로드 (.xlsx)"""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT is_super FROM users WHERE emp_id = ?", (admin_emp_id.strip(),))
+    admin_row = cursor.fetchone()
+    if not admin_row or int(admin_row["is_super"] or 0) != 1:
+        conn.close()
+        raise HTTPException(status_code=403, detail="슈퍼관리자만 내보내기가 가능합니다.")
+
+    where_clauses = ["1=1"]
+    params = []
+
+    if start_date:
+        where_clauses.append("created_at >= ?")
+        params.append(f"{start_date.strip()} 00:00:00")
+    if end_date:
+        where_clauses.append("created_at <= ?")
+        params.append(f"{end_date.strip()} 23:59:59")
+    if action_type and action_type.strip():
+        where_clauses.append("action_type = ?")
+        params.append(action_type.strip().upper())
+    if status and status.strip():
+        where_clauses.append("status = ?")
+        params.append(status.strip().upper())
+    if search and search.strip():
+        s = f"%{search.strip()}%"
+        where_clauses.append("(emp_id LIKE ? OR user_name LIKE ? OR ip_address LIKE ? OR details LIKE ?)")
+        params.extend([s, s, s, s])
+
+    query = f"""
+        SELECT id, emp_id, user_name, action_type, status, ip_address, details, user_agent, created_at
+        FROM access_logs
+        WHERE {' AND '.join(where_clauses)}
+        ORDER BY id DESC
+        LIMIT 5000
+    """
+    cursor.execute(query, tuple(params))
+    logs = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    # 워크북 생성 및 스타일 적용
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "접속및보안감사로그"
+    ws.views.sheetView[0].showGridLines = True
+
+    # 1. 대제목
+    ws.merge_cells("A1:I1")
+    title_cell = ws["A1"]
+    title_cell.value = "🛡️ 시스템 보안 및 사용자 접속 감사 로그 (Team Overtime Manager)"
+    title_cell.font = Font(name="맑은 고딕", size=15, bold=True, color="FFFFFF")
+    title_cell.fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+    title_cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 36
+
+    # 2. 메타 정보
+    ws.merge_cells("A2:I2")
+    meta_cell = ws["A2"]
+    meta_cell.value = f"출력일시: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  |  조회자: 슈퍼관리자({admin_emp_id})  |  총 {len(logs)}건"
+    meta_cell.font = Font(name="맑은 고딕", size=10, italic=True, color="64748B")
+    meta_cell.alignment = Alignment(horizontal="right", vertical="center")
+    ws.row_dimensions[2].height = 20
+
+    # 3. 헤더
+    headers = ["순번", "기록 일시", "사원번호", "성명", "구분(액션)", "상태", "접속 IP", "상세 내용", "기기 환경(User-Agent)"]
+    ws.row_dimensions[3].height = 26
+
+    thin_border = Border(
+        left=Side(style='thin', color='CBD5E1'),
+        right=Side(style='thin', color='CBD5E1'),
+        top=Side(style='thin', color='CBD5E1'),
+        bottom=Side(style='thin', color='CBD5E1')
+    )
+
+    for col_idx, h in enumerate(headers, 1):
+        cell = ws.cell(row=3, column=col_idx)
+        cell.value = h
+        cell.font = Font(name="맑은 고딕", size=10, bold=True, color="FFFFFF")
+        cell.fill = PatternFill(start_color="3B82F6", end_color="3B82F6", fill_type="solid")
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = thin_border
+
+    # 4. 데이터 채우기
+    success_fill = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid") # 연녹색
+    fail_fill = PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid")    # 연빨강
+    zebra_fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+
+    for i, log in enumerate(logs, 1):
+        row_num = i + 3
+        ws.row_dimensions[row_num].height = 22
+        is_even = (i % 2 == 0)
+
+        c1 = ws.cell(row=row_num, column=1, value=log["id"])
+        c2 = ws.cell(row=row_num, column=2, value=log["created_at"])
+        c3 = ws.cell(row=row_num, column=3, value=log["emp_id"])
+        c4 = ws.cell(row=row_num, column=4, value=log["user_name"] or "-")
+        c5 = ws.cell(row=row_num, column=5, value=log["action_type"])
+        c6 = ws.cell(row=row_num, column=6, value=log["status"])
+        c7 = ws.cell(row=row_num, column=7, value=log["ip_address"])
+        c8 = ws.cell(row=row_num, column=8, value=log["details"])
+        c9 = ws.cell(row=row_num, column=9, value=log["user_agent"])
+
+        # 정렬
+        c1.alignment = Alignment(horizontal="center", vertical="center")
+        c2.alignment = Alignment(horizontal="center", vertical="center")
+        c3.alignment = Alignment(horizontal="center", vertical="center")
+        c4.alignment = Alignment(horizontal="center", vertical="center")
+        c5.alignment = Alignment(horizontal="center", vertical="center")
+        c6.alignment = Alignment(horizontal="center", vertical="center")
+        c7.alignment = Alignment(horizontal="center", vertical="center")
+        c8.alignment = Alignment(horizontal="left", vertical="center")
+        c9.alignment = Alignment(horizontal="left", vertical="center")
+
+        # 폰트
+        for c in (c1, c2, c3, c4, c5, c6, c7, c8, c9):
+            c.font = Font(name="맑은 고딕", size=9)
+            c.border = thin_border
+            if is_even:
+                c.fill = zebra_fill
+
+        # 상태별 강조 배지
+        if log["status"] == "SUCCESS":
+            c6.fill = success_fill
+            c6.font = Font(name="맑은 고딕", size=9, bold=True, color="166534")
+        else:
+            c6.fill = fail_fill
+            c6.font = Font(name="맑은 고딕", size=9, bold=True, color="991B1B")
+
+    # 컬럼 너비 설정
+    col_widths = {1: 8, 2: 20, 3: 13, 4: 12, 5: 14, 6: 12, 7: 17, 8: 35, 9: 45}
+    for col_idx, width in col_widths.items():
+        ws.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = width
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"접속및보안감사로그_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    encoded_filename = quote(filename)
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{encoded_filename}\"; filename*=UTF-8''{encoded_filename}"
+        }
+    )
+
+
 # ----------------- PPT 매뉴얼 다운로드 API (사용자용 / 관리자용 분리) -----------------
 
 @app.get("/api/manual/user")
@@ -1469,7 +1773,7 @@ def download_user_manual():
     """사용자 모드 전용 매뉴얼 다운로드 (.pptx)"""
     if not USER_PPTX_PATH.exists():
         create_manual()
-    filename = "특근관리시스템_사용자_매뉴얼(v1.35).pptx"
+    filename = "특근관리시스템_사용자_매뉴얼(v1.36).pptx"
     encoded_filename = quote(filename)
     return FileResponse(
         str(USER_PPTX_PATH),
@@ -1482,7 +1786,7 @@ def download_admin_manual():
     """관리자 모드 전용 운영 매뉴얼 다운로드 (.pptx)"""
     if not ADMIN_PPTX_PATH.exists():
         create_manual()
-    filename = "특근관리시스템_관리자_운영매뉴얼(v1.35).pptx"
+    filename = "특근관리시스템_관리자_운영매뉴얼(v1.36).pptx"
     encoded_filename = quote(filename)
     return FileResponse(
         str(ADMIN_PPTX_PATH),

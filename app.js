@@ -219,13 +219,11 @@ function getThisSaturdayStr() {
   return formatDateStr(sat);
 }
 
-// 사원번호 클라이언트 검증: 슈퍼관리자(ps37082) 제외 숫자 6자리 필수 (요구사항 8)
+// 사원번호 클라이언트 검증: 공백 및 유효성 확인
 function validateEmpIdClient(empId) {
   empId = (empId || '').trim();
-  if (empId.toLowerCase() === 'ps37082') return true;
-  const regex = /^\d{6}$/;
-  if (!regex.test(empId)) {
-    showToast('사원번호는 6자리 숫자여야 합니다. (예: 123456)', 'warning');
+  if (!empId) {
+    showToast('사원번호를 올바르게 입력해 주세요.', 'warning');
     return false;
   }
   return true;
@@ -409,7 +407,20 @@ function setUserSession(user) {
   if (manageTeamsTopBtnEl) {
     manageTeamsTopBtnEl.style.display = isSuper ? 'inline-block' : 'none';
   }
+  
+  // 슈퍼관리자 전용 보안 감사 로그 탭 제어 (신규 요구사항 5)
+  const adminSubTabAccessLogs = document.getElementById('adminSubTabAccessLogs');
+  if (adminSubTabAccessLogs) {
+    adminSubTabAccessLogs.style.display = isSuper ? 'inline-block' : 'none';
+  }
+
   loadTeams();
+
+  // 로그인 성공 시 상단 헤더 액션 버튼 표시 (로그인 전 화면에서는 숨김)
+  const headerNavActions = document.getElementById('headerNavActions');
+  if (headerNavActions) {
+    headerNavActions.style.display = 'flex';
+  }
 
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('mainDashboard').style.display = 'block';
@@ -432,11 +443,31 @@ function setUserSession(user) {
   loadUserOvertimes();
 }
 
-document.getElementById('logoutBtn').addEventListener('click', () => {
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  // 로그아웃 감사 로그 기록
+  if (currentUser && currentUser.emp_id) {
+    try {
+      fetch('/api/users/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emp_id: currentUser.emp_id })
+      });
+    } catch (e) {
+      console.warn('Logout log error:', e);
+    }
+  }
+
   currentUser = null;
   try {
     localStorage.removeItem('overtime_session');
   } catch (e) {}
+
+  // 로그인 전 상태로 초기화: 상단 헤더 액션 도구 완전 숨김
+  const headerNavActions = document.getElementById('headerNavActions');
+  if (headerNavActions) {
+    headerNavActions.style.display = 'none';
+  }
+
   document.getElementById('mainDashboard').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('logoutBtn').style.display = 'none';
@@ -1367,9 +1398,11 @@ async function openHistoryModal(itemId) {
 const adminSubTabOvertimes = document.getElementById('adminSubTabOvertimes');
 const adminSubTabUsers = document.getElementById('adminSubTabUsers');
 const adminSubTabSummary = document.getElementById('adminSubTabSummary');
+const adminSubTabAccessLogs = document.getElementById('adminSubTabAccessLogs');
 const adminOvertimeView = document.getElementById('adminOvertimeView');
 const adminUserView = document.getElementById('adminUserView');
 const adminSummaryView = document.getElementById('adminSummaryView');
+const adminAccessLogsView = document.getElementById('adminAccessLogsView');
 
 const viewTabCalendar = document.getElementById('viewTabCalendar');
 const viewTabTable = document.getElementById('viewTabTable');
@@ -1380,9 +1413,11 @@ adminSubTabOvertimes.addEventListener('click', () => {
   adminSubTabOvertimes.className = 'btn btn-primary btn-sm';
   adminSubTabUsers.className = 'btn btn-secondary btn-sm';
   if (adminSubTabSummary) adminSubTabSummary.className = 'btn btn-secondary btn-sm';
+  if (adminSubTabAccessLogs) adminSubTabAccessLogs.className = 'btn btn-secondary btn-sm';
   adminOvertimeView.style.display = 'block';
   adminUserView.style.display = 'none';
   if (adminSummaryView) adminSummaryView.style.display = 'none';
+  if (adminAccessLogsView) adminAccessLogsView.style.display = 'none';
   loadAdminData();
 });
 
@@ -1390,9 +1425,11 @@ adminSubTabUsers.addEventListener('click', () => {
   adminSubTabUsers.className = 'btn btn-primary btn-sm';
   adminSubTabOvertimes.className = 'btn btn-secondary btn-sm';
   if (adminSubTabSummary) adminSubTabSummary.className = 'btn btn-secondary btn-sm';
+  if (adminSubTabAccessLogs) adminSubTabAccessLogs.className = 'btn btn-secondary btn-sm';
   adminOvertimeView.style.display = 'none';
   adminUserView.style.display = 'block';
   if (adminSummaryView) adminSummaryView.style.display = 'none';
+  if (adminAccessLogsView) adminAccessLogsView.style.display = 'none';
   loadAdminUserTable();
 });
 
@@ -1401,11 +1438,28 @@ if (adminSubTabSummary) {
     adminSubTabSummary.className = 'btn btn-primary btn-sm';
     adminSubTabOvertimes.className = 'btn btn-secondary btn-sm';
     adminSubTabUsers.className = 'btn btn-secondary btn-sm';
+    if (adminSubTabAccessLogs) adminSubTabAccessLogs.className = 'btn btn-secondary btn-sm';
     adminOvertimeView.style.display = 'none';
     adminUserView.style.display = 'none';
     adminSummaryView.style.display = 'block';
+    if (adminAccessLogsView) adminAccessLogsView.style.display = 'none';
     initSummaryDateFilter();
     loadSettlementSummary();
+  });
+}
+
+if (adminSubTabAccessLogs) {
+  adminSubTabAccessLogs.addEventListener('click', () => {
+    adminSubTabAccessLogs.className = 'btn btn-primary btn-sm';
+    adminSubTabOvertimes.className = 'btn btn-secondary btn-sm';
+    adminSubTabUsers.className = 'btn btn-secondary btn-sm';
+    if (adminSubTabSummary) adminSubTabSummary.className = 'btn btn-secondary btn-sm';
+    adminOvertimeView.style.display = 'none';
+    adminUserView.style.display = 'none';
+    if (adminSummaryView) adminSummaryView.style.display = 'none';
+    if (adminAccessLogsView) adminAccessLogsView.style.display = 'block';
+    initAccessLogsFilter();
+    loadAccessLogs();
   });
 }
 
@@ -3376,5 +3430,179 @@ try {
   }
 } catch (e) {
   console.warn('세션 복구 실패:', e);
+}
+
+// ===== 18. 슈퍼관리자 전용 보안 감사 및 접속 로그 (신규 요구사항 5) =====
+
+function initAccessLogsFilter() {
+  const startInput = document.getElementById('accessFilterStartDate');
+  const endInput = document.getElementById('accessFilterEndDate');
+  if (startInput && endInput && !startInput.value) {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    startInput.value = `${y}-${m}-01`;
+    endInput.value = getTodayStr();
+  }
+}
+
+async function loadAccessLogs() {
+  if (!currentUser) return;
+  const tbody = document.getElementById('accessLogsTbody');
+  if (tbody) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:var(--text-muted); padding:2rem;">보안 감사 로그를 조회 중입니다...</td></tr>';
+  }
+
+  const startDate = document.getElementById('accessFilterStartDate')?.value || '';
+  const endDate = document.getElementById('accessFilterEndDate')?.value || '';
+  const actionType = document.getElementById('accessFilterAction')?.value || '';
+  const status = document.getElementById('accessFilterStatus')?.value || '';
+  const search = document.getElementById('accessFilterSearch')?.value || '';
+
+  const params = [`admin_emp_id=${encodeURIComponent(currentUser.emp_id)}`];
+  if (startDate) params.push(`start_date=${encodeURIComponent(startDate)}`);
+  if (endDate) params.push(`end_date=${encodeURIComponent(endDate)}`);
+  if (actionType) params.push(`action_type=${encodeURIComponent(actionType)}`);
+  if (status) params.push(`status=${encodeURIComponent(status)}`);
+  if (search) params.push(`search=${encodeURIComponent(search)}`);
+
+  try {
+    const res = await fetch(`/api/admin/access-logs?${params.join('&')}`);
+    const data = await res.json();
+    if (!res.ok) {
+      if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; color:var(--danger); padding:2rem;">${escapeHtml(data.detail || '조회 권한이 없거나 실패했습니다.')}</td></tr>`;
+      return;
+    }
+
+    // 1. 상단 통계 카드 갱신
+    if (data.stats) {
+      const s = data.stats;
+      const elTotal = document.getElementById('statAccessTotal');
+      const elToday = document.getElementById('statAccessTodayTotal');
+      const elFail = document.getElementById('statAccessTodayFailed');
+      const elReg = document.getElementById('statAccessTodayRegistered');
+      if (elTotal) elTotal.textContent = Number(s.total_logs || 0).toLocaleString();
+      if (elToday) elToday.textContent = Number(s.today_total || 0).toLocaleString();
+      if (elFail) elFail.textContent = Number(s.today_failed || 0).toLocaleString();
+      if (elReg) elReg.textContent = Number(s.today_registered || 0).toLocaleString();
+    }
+
+    // 2. 테이블 렌더링
+    renderAccessLogs(data.logs || []);
+  } catch (err) {
+    console.error('Failed to load access logs:', err);
+    if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:var(--danger); padding:2rem;">통신 오류가 발생했습니다.</td></tr>';
+  }
+}
+
+function renderAccessLogs(logs) {
+  const tbody = document.getElementById('accessLogsTbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (!logs || logs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:var(--text-muted); padding:2.5rem;">조회된 보안 감사 로그가 없습니다.</td></tr>';
+    return;
+  }
+
+  logs.forEach(item => {
+    const tr = document.createElement('tr');
+    
+    // 상태 배지
+    const isSuccess = item.status === 'SUCCESS';
+    const statusBadge = isSuccess 
+      ? '<span class="badge" style="background:#dcfce7; color:#166534; font-weight:700; font-size:0.75rem; padding:3px 8px; border-radius:9999px;">✓ 성공</span>'
+      : '<span class="badge" style="background:#fee2e2; color:#991B1B; font-weight:700; font-size:0.75rem; padding:3px 8px; border-radius:9999px;">⚠️ 실패/경고</span>';
+
+    // 액션 구분 배지
+    let actionBadge = `<span class="badge" style="background:#f1f5f9; color:#475569; font-size:0.75rem;">${escapeHtml(item.action_type)}</span>`;
+    if (item.action_type === 'LOGIN') {
+      actionBadge = '<span class="badge" style="background:#e0f2fe; color:#0369a1; font-weight:700; font-size:0.75rem; padding:2px 8px; border-radius:4px;">🔑 로그인</span>';
+    } else if (item.action_type === 'REGISTER') {
+      actionBadge = '<span class="badge" style="background:#f3e8ff; color:#7e22ce; font-weight:700; font-size:0.75rem; padding:2px 8px; border-radius:4px;">🎉 신규등록</span>';
+    } else if (item.action_type === 'LOGOUT') {
+      actionBadge = '<span class="badge" style="background:#f1f5f9; color:#64748b; font-size:0.75rem; padding:2px 8px; border-radius:4px;">🚪 로그아웃</span>';
+    }
+
+    tr.innerHTML = `
+      <td style="text-align:center; color:var(--text-muted); font-size:0.8rem;">${item.id}</td>
+      <td style="text-align:center; font-size:0.82rem; white-space:nowrap;">${escapeHtml(item.created_at || '')}</td>
+      <td style="text-align:center; font-weight:700;">${escapeHtml(item.emp_id || '-')}</td>
+      <td style="text-align:center;">${escapeHtml(item.user_name || '-')}</td>
+      <td style="text-align:center;">${actionBadge}</td>
+      <td style="text-align:center;">${statusBadge}</td>
+      <td style="text-align:center; font-family:monospace; font-size:0.8rem; color:#2563eb;">${escapeHtml(item.ip_address || '-')}</td>
+      <td style="font-size:0.84rem; max-width:260px; word-break:break-all;">${escapeHtml(item.details || '-')}</td>
+      <td style="font-size:0.75rem; color:var(--text-muted); max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(item.user_agent || '')}">
+        ${escapeHtml(item.user_agent || '-')}
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// 엑셀 내보내기 이벤트 바인딩
+const exportAccessLogsBtn = document.getElementById('exportAccessLogsBtn');
+if (exportAccessLogsBtn) {
+  exportAccessLogsBtn.addEventListener('click', () => {
+    if (!currentUser) return;
+    const startDate = document.getElementById('accessFilterStartDate')?.value || '';
+    const endDate = document.getElementById('accessFilterEndDate')?.value || '';
+    const actionType = document.getElementById('accessFilterAction')?.value || '';
+    const status = document.getElementById('accessFilterStatus')?.value || '';
+    const search = document.getElementById('accessFilterSearch')?.value || '';
+
+    const params = [`admin_emp_id=${encodeURIComponent(currentUser.emp_id)}`];
+    if (startDate) params.push(`start_date=${encodeURIComponent(startDate)}`);
+    if (endDate) params.push(`end_date=${encodeURIComponent(endDate)}`);
+    if (actionType) params.push(`action_type=${encodeURIComponent(actionType)}`);
+    if (status) params.push(`status=${encodeURIComponent(status)}`);
+    if (search) params.push(`search=${encodeURIComponent(search)}`);
+
+    showToast('감사 로그 엑셀 다운로드를 시작합니다...');
+    window.location.href = `/api/admin/access-logs/export?${params.join('&')}`;
+  });
+}
+
+// 검색 및 초기화 버튼 바인딩
+const accessSearchBtn = document.getElementById('accessSearchBtn');
+if (accessSearchBtn) {
+  accessSearchBtn.addEventListener('click', loadAccessLogs);
+}
+
+const refreshAccessLogsBtn = document.getElementById('refreshAccessLogsBtn');
+if (refreshAccessLogsBtn) {
+  refreshAccessLogsBtn.addEventListener('click', () => {
+    loadAccessLogs();
+    showToast('보안 감사 로그를 새로고침했습니다.');
+  });
+}
+
+const accessResetBtn = document.getElementById('accessResetBtn');
+if (accessResetBtn) {
+  accessResetBtn.addEventListener('click', () => {
+    const sInput = document.getElementById('accessFilterStartDate');
+    const eInput = document.getElementById('accessFilterEndDate');
+    const aSelect = document.getElementById('accessFilterAction');
+    const stSelect = document.getElementById('accessFilterStatus');
+    const searchInput = document.getElementById('accessFilterSearch');
+    if (sInput) sInput.value = '';
+    if (eInput) eInput.value = '';
+    if (aSelect) aSelect.value = '';
+    if (stSelect) stSelect.value = '';
+    if (searchInput) searchInput.value = '';
+    loadAccessLogs();
+  });
+}
+
+// 엔터 키 검색 지원
+const accessFilterSearchInput = document.getElementById('accessFilterSearch');
+if (accessFilterSearchInput) {
+  accessFilterSearchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      loadAccessLogs();
+    }
+  });
 }
 

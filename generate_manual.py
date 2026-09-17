@@ -705,14 +705,14 @@ def build_user_presentation(images):
     tf1.word_wrap = True
 
     p1_tag = tf1.paragraphs[0]
-    p1_tag.text = "SMART OVERTIME SYSTEM v1.35  |  일반 사원 전용 간편 매뉴얼"
+    p1_tag.text = "SMART OVERTIME SYSTEM v1.36  |  일반 사원 전용 간편 매뉴얼"
     p1_tag.font.size = Pt(14)
     p1_tag.font.bold = True
     p1_tag.font.color.rgb = RGBColor(253, 186, 116)
     p1_tag.space_after = Pt(14)
 
     p1_title = tf1.add_paragraph()
-    p1_title.text = "스마트 특근 관리 시스템\n사용자 전용 기능 매뉴얼 (v1.35)"
+    p1_title.text = "스마트 특근 관리 시스템\n사용자 전용 기능 매뉴얼 (v1.36)"
     p1_title.font.size = Pt(36)
     p1_title.font.bold = True
     p1_title.font.color.rgb = RGBColor(255, 255, 255)
@@ -725,18 +725,18 @@ def build_user_presentation(images):
     p1_sub.space_after = Pt(28)
 
     p1_auth = tf1.add_paragraph()
-    p1_auth.text = "배포 버전: v1.35 (2026-09-17)  |  PC 모니터 & 스마트폰(모바일) 완벽 지원"
+    p1_auth.text = "배포 버전: v1.36 (2026-09-17)  |  PC 모니터 & 스마트폰(모바일) 완벽 지원"
     p1_auth.font.size = Pt(13)
     p1_auth.font.color.rgb = RGBColor(148, 163, 184)
 
     # --- SLIDE 2: 1단계 - 사번만 넣고 슝 들어가기 ---
     s2_data = [
-        ("① v1.35 버전 뱃지 확인", "화면 오른쪽 위에 파란색 [v1.35] 뱃지가 보이면 최신 버전입니다. 클릭 시 신규 릴리즈 이력이 표시됩니다."),
-        ("② 6자리 숫자 사원번호 입력", "사원번호는 6자리 숫자로 입력합니다. (예: 113019) 복잡한 비밀번호 없이 빠르게 입장 가능합니다."),
+        ("① v1.36 버전 뱃지 확인", "화면 오른쪽 위에 파란색 [v1.36] 뱃지가 보이면 최신 버전입니다. 클릭 시 신규 릴리즈 이력이 표시됩니다."),
+        ("② 사원번호 간편 입력", "본인의 사원번호를 입력합니다. 복잡한 비밀번호 없이 빠르게 입장 가능합니다."),
         ("③ [입장하기] 버튼 클릭", "등록된 사원은 이름과 소속팀이 자동 조회되어 즉시 메인 대시보드로 이동합니다."),
         ("④ 미등록 사번 즉시 등록", "처음 방문한 사번은 신규 등록창이 나타나며, 성명과 소속팀을 선택하면 즉시 등록되어 입장합니다.")
     ]
-    add_visual_slide(prs, "01", "6자리 사원번호로 간편 입장하기", "비밀번호 없이 6자리 숫자 사번으로 빠르고 안전하게 입장합니다.", s2_data, images["login"])
+    add_visual_slide(prs, "01", "사원번호로 간편 입장하기", "비밀번호 없이 사원번호 입력만으로 빠르고 안전하게 입장합니다.", s2_data, images["login"])
 
     # --- SLIDE 3: 2단계 - 달력 콕 찍어서 특근 신청하기 ---
     s3_data = [
@@ -839,7 +839,7 @@ def build_user_presentation(images):
     p_sub6.font.color.rgb = COLOR_TEXT_MUTED
 
     user_qa_items = [
-        ("Q1. 사원번호는 어떻게 입력하나요?", "모든 팀원은 정확히 6자리 숫자(예: 113019)로 입력하며, 비밀번호 없이 간편하게 입장합니다."),
+        ("Q1. 사원번호는 어떻게 입력하나요?", "본인의 사원번호를 입력하면 비밀번호 없이 간편하게 입장하여 특근을 신청할 수 있습니다."),
         ("Q2. 프로젝트번호와 사유 예시 가이드가 있나요?", "네, 프로젝트번호는 'BT2601-L1', 장소는 '본사5층', 사유는 '프로그램 개발'로 기본 예시 안내가 제공됩니다."),
         ("Q3. 실수로 같은 날짜에 중복 신청하면 어떻게 되나요?", "시스템에서 동일 날짜 중복 신청을 사전에 감지하여 경고창과 함께 안전하게 차단합니다."),
         ("Q4. 내가 신청한 특근을 달력 형태로도 볼 수 있나요?", "네, [📅 달력 보기] 탭을 누르면 개인 월간 달력에서 승인완료/대기 상태가 색상별로 표시됩니다."),
@@ -893,27 +893,27 @@ def build_admin_presentation(images):
     tf1.word_wrap = True
 
     p1_tag = tf1.paragraphs[0]
-    p1_tag.text = "SMART OVERTIME SYSTEM v1.35  |  관리자 및 운영자 전용 가이드"
+    p1_tag.text = "SMART OVERTIME SYSTEM v1.36  |  관리자 및 운영자 전용 가이드"
     p1_tag.font.size = Pt(14)
     p1_tag.font.bold = True
     p1_tag.font.color.rgb = RGBColor(253, 186, 116)
     p1_tag.space_after = Pt(14)
 
     p1_title = tf1.add_paragraph()
-    p1_title.text = "스마트 특근 관리 시스템\n관리자 모드 운영 매뉴얼 (v1.35)"
+    p1_title.text = "스마트 특근 관리 시스템\n관리자 모드 운영 매뉴얼 (v1.36)"
     p1_title.font.size = Pt(36)
     p1_title.font.bold = True
     p1_title.font.color.rgb = RGBColor(255, 255, 255)
     p1_title.space_after = Pt(20)
 
     p1_sub = tf1.add_paragraph()
-    p1_sub.text = "캘린더 색상 범례, 팀원 대리 신청(비밀 보너스), 권한 격리, 실특근 정산 및 엑셀 원장 관리자 공식 가이드입니다."
+    p1_sub.text = "보안 감사 로그, 캘린더 색상 범례, 팀원 대리 신청(비밀 보너스), 권한 격리, 실특근 정산 및 엑셀 원장 관리자 공식 가이드입니다."
     p1_sub.font.size = Pt(15)
     p1_sub.font.color.rgb = RGBColor(203, 213, 225)
     p1_sub.space_after = Pt(28)
 
     p1_auth = tf1.add_paragraph()
-    p1_auth.text = "배포 버전: v1.35 (2026-09-17)  |  총괄 슈퍼관리자 및 부서 팀관리자 전용"
+    p1_auth.text = "배포 버전: v1.36 (2026-09-17)  |  총괄 슈퍼관리자 및 부서 팀관리자 전용"
     p1_auth.font.size = Pt(13)
     p1_auth.font.color.rgb = RGBColor(148, 163, 184)
 
@@ -1133,13 +1133,73 @@ def build_admin_presentation(images):
         p3.font.color.rgb = COLOR_TEXT_MAIN
         p3.line_spacing = 1.3
 
-    # --- SLIDE 9: 모바일 및 외부망 접속 관리 ---
+    # --- SLIDE 9: 보안 감사 및 사용자 접속 로그 관리 (신규 v1.36 요구사항 5) ---
+    s9_sec = prs.slides.add_slide(blank_layout)
+    header_tb9_sec = s9_sec.shapes.add_textbox(Inches(0.8), Inches(0.4), Inches(11.7), Inches(1.1))
+    htf9_sec = header_tb9_sec.text_frame
+    htf9_sec.word_wrap = True
+    p_step9_sec = htf9_sec.paragraphs[0]
+    p_step9_sec.text = "STEP 08  |  슈퍼관리자 전용 시스템 보안 및 접속 감사 로그 (v1.36 신규)"
+    p_step9_sec.font.size = Pt(12)
+    p_step9_sec.font.bold = True
+    p_step9_sec.font.color.rgb = COLOR_ACCENT
+
+    p_title9_sec = htf9_sec.add_paragraph()
+    p_title9_sec.text = "🛡️ 시스템 보안 및 사용자 접속 감사 로그 관리"
+    p_title9_sec.font.size = Pt(22)
+    p_title9_sec.font.bold = True
+    p_title9_sec.font.color.rgb = COLOR_PRIMARY
+
+    p_sub9_sec = htf9_sec.add_paragraph()
+    p_sub9_sec.text = "사원 로그인 시도(성공/실패), 신규 사원 등록, IP 주소 및 기기(User-Agent) 이력을 실시간 감사·추적합니다."
+    p_sub9_sec.font.size = Pt(13)
+    p_sub9_sec.font.color.rgb = COLOR_TEXT_MUTED
+
+    security_cards = [
+        ("1. 실시간 접속/보안 감사 추적", "로그인 시도 성공/실패, 미등록 사번 접근 시도, 신규 사원 등록, 로그아웃 이력이 초단위로 영구 기록됩니다.", "#eff6ff", "#2563eb"),
+        ("2. 다차원 필터링 & 판독 용이성", "기간(시작~종료), 액션 구분(LOGIN/REGISTER/LOGOUT), 상태(성공/실패), 사번/성명/IP 검색으로 비정상 접속을 1초 만에 식별합니다.", "#ecfdf5", "#10b981"),
+        ("3. 서식화된 엑셀(.xlsx) 내보내기", "openpyxl 기반 컬러 배지(성공: 연녹색, 실패: 연빨강)가 적용된 감사 보고서 엑셀 파일을 원클릭으로 즉시 다운로드합니다.", "#fef3c7", "#ea580c")
+    ]
+
+    for i, (c_title, c_desc, c_bg, c_line) in enumerate(security_cards):
+        cx = Inches(0.8 + i * 4.0)
+        c_box = s9_sec.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, cx, Inches(1.8), Inches(3.7), Inches(4.8))
+        c_box.fill.solid()
+        c_box.fill.fore_color.rgb = RGBColor(255, 255, 255)
+        c_box.line.color.rgb = RGBColor(203, 213, 225)
+        c_box.line.width = Pt(2)
+
+        c_tb = s9_sec.shapes.add_textbox(cx + Inches(0.2), Inches(2.0), Inches(3.3), Inches(4.3))
+        ctf = c_tb.text_frame
+        ctf.word_wrap = True
+
+        p1 = ctf.paragraphs[0]
+        p1.text = f"보안 체계 0{i+1}"
+        p1.font.size = Pt(12)
+        p1.font.bold = True
+        p1.font.color.rgb = RGBColor(234, 88, 12)
+        p1.space_after = Pt(8)
+
+        p2 = ctf.add_paragraph()
+        p2.text = c_title
+        p2.font.size = Pt(18)
+        p2.font.bold = True
+        p2.font.color.rgb = COLOR_PRIMARY
+        p2.space_after = Pt(14)
+
+        p3 = ctf.add_paragraph()
+        p3.text = c_desc
+        p3.font.size = Pt(13)
+        p3.font.color.rgb = COLOR_TEXT_MAIN
+        p3.line_spacing = 1.3
+
+    # --- SLIDE 10: 모바일 및 외부망 접속 관리 ---
     s9 = prs.slides.add_slide(blank_layout)
     header_tb9 = s9.shapes.add_textbox(Inches(0.8), Inches(0.4), Inches(11.7), Inches(1.1))
     htf9 = header_tb9.text_frame
     htf9.word_wrap = True
     p_step9 = htf9.paragraphs[0]
-    p_step9.text = "STEP 08  |  스마트폰 모바일 및 외부망 접속 관리"
+    p_step9.text = "STEP 09  |  스마트폰 모바일 및 외부망 접속 관리"
     p_step9.font.size = Pt(12)
     p_step9.font.bold = True
     p_step9.font.color.rgb = COLOR_ACCENT
@@ -1193,7 +1253,7 @@ def build_admin_presentation(images):
         p3.font.color.rgb = COLOR_TEXT_MAIN
         p3.line_spacing = 1.3
 
-    # --- SLIDE 10: 관리자 전용 Q&A 총정리 ---
+    # --- SLIDE 11: 관리자 전용 Q&A 총정리 ---
     s10 = prs.slides.add_slide(blank_layout)
     header_tb10 = s10.shapes.add_textbox(Inches(0.8), Inches(0.4), Inches(11.7), Inches(1.1))
     htf10 = header_tb10.text_frame
@@ -1205,7 +1265,7 @@ def build_admin_presentation(images):
     p_step10.font.color.rgb = COLOR_ACCENT
 
     p_title10 = htf10.add_paragraph()
-    p_title10.text = "자주 묻는 질문(Q&A)과 관리자 운영 꿀팁 총정리 (v1.35)"
+    p_title10.text = "자주 묻는 질문(Q&A)과 관리자 운영 꿀팁 총정리 (v1.36)"
     p_title10.font.size = Pt(22)
     p_title10.font.bold = True
     p_title10.font.color.rgb = COLOR_PRIMARY
@@ -1219,7 +1279,7 @@ def build_admin_presentation(images):
         ("Q1. 팀관리자가 총괄관리자의 특근 일정을 볼 수 있나요?", "아닙니다. 팀관리자는 총괄관리자의 특근 일정을 일체 열람할 수 없도록 철저히 차단 격리되어 있습니다."),
         ("Q2. 팀원 대리 신청 시 비밀 보너스는 사원에게 노출되나요?", "사원 화면 및 API 응답에서는 0으로 마스킹되어 사원은 전혀 모르며, 오직 관리자와 엑셀 원장에만 기재됩니다."),
         ("Q3. 팀관리자와 총괄관리자의 권한 차이는 어떻게 되나요?", "팀관리자는 본인 팀원의 승인/수정만 가능하며, 팀원 소속팀 변경 및 관리자 권한 지정은 오직 총괄관리자만 가능합니다."),
-        ("Q4. 동일 날짜에 중복 신청이 가능한가요?", "불가능합니다. 신청자 본인 신청 및 관리자 대리 신청 모두 동일 일자 중복 시 즉시 차단됩니다."),
+        ("Q4. 시스템 접속 및 보안 감사 로그는 누가 볼 수 있나요?", "오직 총괄 슈퍼관리자만 열람할 수 있으며, 로그인 시도(성공/실패), 신규 등록, 접속 IP 및 User-Agent 정보를 실시간 추적하고 엑셀로 추출합니다."),
         ("Q5. 웹 저장 및 열기 기능은 일반 사원도 볼 수 있나요?", "사원 화면에서는 숨김 처리되어 일반 사원은 볼 수 없으며, 관리자 모드에서만 안전하게 조작할 수 있습니다.")
     ]
 
