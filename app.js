@@ -813,9 +813,15 @@ overtimeForm.addEventListener('submit', async (e) => {
         sub_holiday_used: 0.0
       })
     });
-    const data = await res.json();
+    let data = {};
+    try {
+      data = await res.json();
+    } catch (parseErr) {
+      const text = await res.text().catch(() => '');
+      data = { detail: text || `서버 응답 오류 (${res.status})` };
+    }
     if (!res.ok) {
-      showToast(data.detail || '특근 신청 저장에 실패했습니다.', 'error');
+      showToast(data.detail || `특근 신청 저장에 실패했습니다. (${res.status})`, 'error');
       return;
     }
 
@@ -827,7 +833,7 @@ overtimeForm.addEventListener('submit', async (e) => {
     await loadUserOvertimes();
   } catch (err) {
     console.error(err);
-    showToast('통신 오류가 발생했습니다. 네트워크를 확인해주세요.', 'error');
+    showToast(`통신 오류가 발생했습니다: ${err.message || '네트워크를 확인해주세요.'}`, 'error');
   } finally {
     restoreBtn();
   }

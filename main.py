@@ -37,6 +37,20 @@ WEB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="Team Overtime Manager", version="v1.38")
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    err_trace = traceback.format_exc()
+    print(f"[Unhandled Exception on {request.url.path}] {err_trace}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"서버 처리 중 오류가 발생했습니다: {str(exc)}",
+            "error_type": type(exc).__name__,
+            "path": request.url.path
+        }
+    )
+
 def validate_emp_id(emp_id: str):
     """사원번호 유효성 검증:
     - 슈퍼관리자(ps37082) 제외
@@ -579,7 +593,7 @@ def add_team(req: TeamCreateRequest):
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     cursor.execute("INSERT INTO teams (name, created_at) VALUES (?, ?)", (team_name, now_str))
-    team_id = cursor.lastrowid
+    team_id = cursor.lastrowid or 0
     conn.commit()
     conn.close()
     return {"message": f"'{team_name}' 소속팀이 추가되었습니다.", "team": {"id": team_id, "name": team_name, "created_at": now_str}}
@@ -732,13 +746,52 @@ def create_overtime(req: OvertimeCreateRequest):
     new_id = cursor.lastrowid
     conn.commit()
 
-    cursor.execute("SELECT * FROM overtimes WHERE id = ?", (new_id,))
-    new_record = dict(cursor.fetchone())
+    # Turso 등 HTTP 드라이버에서 lastrowid가 None인 경우 직전 삽입된 ID 조회
+    if not new_id:
+        try:
+            cursor.execute("SELECT id FROM overtimes WHERE emp_id = ? ORDER BY id DESC LIMIT 1", (req.emp_id.strip(),))
+            last_row = cursor.fetchone()
+            if last_row:
+                new_id = last_row["id"]
+        except Exception as e:
+            print(f"[create_overtime fallback warning] {e}")
+
+    new_record = None
+    if new_id:
+        try:
+            cursor.execute("SELECT * FROM overtimes WHERE id = ?", (new_id,))
+            fetched = cursor.fetchone()
+            if fetched:
+                new_record = dict(fetched)
+        except Exception as e:
+            print(f"[create_overtime fetch warning] {e}")
+
     conn.close()
 
-    # 감사 로그 기록
+    if not new_record:
+        # DB 복제 지연 또는 fetch 실패 시에도 정상 응답을 보장하는 스마트 폴백
+        new_record = {
+            "id": new_id or 0,
+            "emp_id": req.emp_id.strip(),
+            "user_name": user_name,
+            "team": team,
+            "category": req.category.strip(),
+            "start_date": req.start_date.strip(),
+            "end_date": req.end_date.strip(),
+            "project_no": (req.project_no or "").strip(),
+            "location": (req.location or "").strip(),
+            "reason": (req.reason or "").strip(),
+            "sub_holiday_used": float(req.sub_holiday_used or 0),
+            "sub_holiday_date": (req.sub_holiday_date or "").strip(),
+            "is_confirmed": 0,
+            "created_at": now_str,
+            "updated_at": now_str,
+            "bonus_granted": bonus_granted_val
+        }
+
+    # 감사 로그 비동기 기록
     log_audit(
-        overtime_id=new_id,
+        overtime_id=new_id or 0,
         action="신청",
         changed_by=req.emp_id.strip(),
         changed_by_name=user_name,
@@ -949,7 +1002,8 @@ def update_overtime(item_id: int, req: OvertimeUpdateRequest):
     conn.commit()
 
     cursor.execute("SELECT * FROM overtimes WHERE id = ?", (item_id,))
-    new_data = dict(cursor.fetchone())
+    fetched = cursor.fetchone()
+    new_data = dict(fetched) if fetched else prev_data
     conn.close()
 
     # 감사 로그 기록

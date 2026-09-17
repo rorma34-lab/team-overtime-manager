@@ -33,65 +33,11 @@ def get_db_mode() -> str:
     return "TURSO_CLOUD" if is_using_turso() else "LOCAL_SQLITE"
 
 # -------------------------------------------------------------
-# ⚡ 1. Turso HTTP Persistent Keep-Alive 세션 최적화 엔진
+# ⚡ 1. Turso 클라우드 데이터베이스 안정성 보장
 # -------------------------------------------------------------
-_TURSO_CONNECTION_POOL = {}
-_TURSO_POOL_LOCK = threading.Lock()
+# turso_serverless의 표준 urllib 엔진은 스레드별 독립 세션으로 동작하여
+# 멀티스레드 환경(비동기 로깅 큐 + API 워커 스레드)에서 충돌 없이 가장 안정적입니다.
 
-def _get_persistent_turso_client(base_url: str):
-    """Turso 호스트에 대해 TLS 핸드셰이크를 매번 반복하지 않는 영구 Keep-Alive HTTPS 연결 유지"""
-    parsed = urllib.parse.urlparse(base_url)
-    host_key = f"{parsed.hostname}:{parsed.port or 443}"
-    with _TURSO_POOL_LOCK:
-        conn = _TURSO_CONNECTION_POOL.get(host_key)
-        if conn is None:
-            ctx = ssl.create_default_context()
-            conn = http.client.HTTPSConnection(parsed.hostname, parsed.port or 443, context=ctx, timeout=12.0)
-            _TURSO_CONNECTION_POOL[host_key] = conn
-        return conn
-
-def _patch_turso_keepalive():
-    """turso_serverless 라이브러리의 _post 메서드를 Keep-Alive 영구 연결로 고속화"""
-    try:
-        import turso_serverless.session
-        orig_post = turso_serverless.session.Session._post
-
-        def fast_post(self, path: str, body: dict) -> bytes:
-            payload = json.dumps(body, allow_nan=False).encode("utf-8")
-            headers = self._headers()
-            headers["Connection"] = "keep-alive"
-            headers["Content-Length"] = str(len(payload))
-
-            parsed = urllib.parse.urlparse(self._base_url)
-            full_path = f"{parsed.path.rstrip('/')}{path}"
-            if not full_path:
-                full_path = "/"
-
-            conn = _get_persistent_turso_client(self._base_url)
-            try:
-                conn.request("POST", full_path, body=payload, headers=headers)
-                resp = conn.getresponse()
-                if resp.status == 200:
-                    return resp.read()
-                raw = resp.read().decode("utf-8", errors="replace")
-                self._reset_stream()
-                raise RuntimeError(f"HTTP status {resp.status}: {raw}")
-            except Exception as e:
-                with _TURSO_POOL_LOCK:
-                    _TURSO_CONNECTION_POOL.pop(f"{parsed.hostname}:{parsed.port or 443}", None)
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-                return orig_post(self, path, body)
-
-        turso_serverless.session.Session._post = fast_post
-        print("[Turso Accelerator] HTTP Keep-Alive persistent connection engine successfully attached.")
-    except Exception as e:
-        print(f"[Turso Accelerator Warning] Could not attach Keep-Alive patch: {e}")
-
-if is_using_turso():
-    _patch_turso_keepalive()
 
 def get_db_connection():
     """DB 연결 객체 반환 (Turso 클라우드 DB 또는 로컬 고성능 SQLite 자동 선택)"""
@@ -346,7 +292,7 @@ def create_team(name: str) -> dict:
         cursor = conn.cursor()
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute("INSERT INTO teams (name, created_at) VALUES (?, ?)", (name, now_str))
-        team_id = cursor.lastrowid
+        team_id = cursor.lastrowid or 0
         conn.commit()
         invalidate_teams_cache()
         return {"id": team_id, "name": name, "created_at": now_str}
