@@ -488,26 +488,34 @@ body {
 }
 
 .calendar-month-title {
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: 1.25rem;
+  font-weight: 800;
   color: var(--text-main);
 }
 
 .cal-nav-btn {
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  width: 32px;
-  height: 32px;
-  display: flex;
+  background: var(--bg-subtle, #f8fafc);
+  border: 1px solid var(--border-color, #cbd5e1);
+  border-radius: 8px;
+  min-width: 38px;
+  height: 38px;
+  padding: 0 10px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-main, #1e293b);
+  transition: all 0.2s ease;
+  user-select: none;
 }
 
 .cal-nav-btn:hover {
   background: #e2e8f0;
+  border-color: #94a3b8;
+  color: var(--primary, #0284c7);
+  transform: translateY(-1px);
 }
 
 .calendar-grid {
@@ -1363,5 +1371,215 @@ th.sort-desc .sort-icon {
   background: #e0e7ff;
   color: #3730a3;
   border: 1px solid #a5b4fc;
+}
+
+/* ============================================================= */
+/* 📱 스마트폰(모바일) 완벽 반응형 최적화 (Max-Width 640px)       */
+/* ============================================================= */
+@media (max-width: 640px) {
+  /* 1. 컨테이너 및 기본 패딩 축소 */
+  .container {
+    padding: 0.6rem 0.5rem !important;
+  }
+  
+  /* 2. 헤더 레이아웃 최적화 */
+  .header-content {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.6rem !important;
+    padding: 0.5rem 0 !important;
+  }
+  
+  .brand-area {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .brand-title {
+    font-size: 1.15rem !important;
+  }
+  
+  .user-info-area {
+    width: 100% !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    gap: 0.4rem !important;
+    flex-wrap: wrap !important;
+  }
+
+  .user-chip {
+    font-size: 0.78rem !important;
+    padding: 3px 8px !important;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* 3. 카드 및 섹션 간격 */
+  .card {
+    padding: 0.9rem 0.75rem !important;
+    margin-bottom: 1rem !important;
+    border-radius: var(--radius-sm, 8px) !important;
+  }
+
+  .card-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.5rem !important;
+  }
+
+  .card-title {
+    font-size: 1.05rem !important;
+  }
+
+  /* 4. 특근 신청 폼 및 달력: 세로 1단 스택 */
+  .apply-layout-grid, .grid-2 {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+
+  /* 5. 캘린더 네비게이션 및 그리드 모바일 핏 */
+  .calendar-header {
+    padding: 0.4rem 0.5rem !important;
+  }
+
+  .calendar-month-title {
+    font-size: 1.1rem !important;
+  }
+
+  .cal-nav-btn {
+    min-width: 34px !important;
+    height: 34px !important;
+    font-size: 0.95rem !important;
+    padding: 0 6px !important;
+  }
+
+  .calendar-grid {
+    gap: 2px !important;
+  }
+
+  .cal-cell {
+    min-height: 42px !important;
+    font-size: 0.82rem !important;
+    padding: 2px !important;
+  }
+
+  /* 사용자 개인 달력 그리드 */
+  .user-cal-cell {
+    min-height: 52px !important;
+    padding: 2px !important;
+  }
+
+  .user-cal-date-num {
+    font-size: 0.75rem !important;
+    margin-bottom: 2px !important;
+  }
+
+  .user-cal-badge {
+    font-size: 0.65rem !important;
+    padding: 1px 3px !important;
+    margin-bottom: 2px !important;
+    letter-spacing: -0.5px;
+  }
+
+  /* 6. 관리자 탭 및 뷰 토글 모바일 슬라이드 지원 */
+  .view-toggle-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.6rem !important;
+  }
+
+  .view-tabs {
+    width: 100% !important;
+    display: flex !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .view-tab-btn {
+    flex: 1 !important;
+    text-align: center !important;
+    padding: 0.45rem 0.5rem !important;
+    font-size: 0.82rem !important;
+  }
+
+  /* 관리자 서브탭 바 가로 스크롤 터치 지원 */
+  div[style*="flex-wrap: wrap; align-items: center;"][style*="margin-bottom: 1.25rem;"] {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: 6px !important;
+  }
+
+  /* 7. 대시보드 통계 그리드 2열 핏 */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.5rem !important;
+  }
+
+  .stat-box {
+    padding: 0.65rem 0.5rem !important;
+  }
+
+  .stat-label {
+    font-size: 0.72rem !important;
+  }
+
+  .stat-value {
+    font-size: 1.25rem !important;
+  }
+
+  /* 8. 필터 바 1열 세로 정렬 */
+  .filter-bar {
+    grid-template-columns: 1fr !important;
+    gap: 0.5rem !important;
+    padding: 0.75rem !important;
+  }
+
+  /* 9. 테이블 모바일 수평 스크롤 강화 */
+  .table-responsive {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    border-radius: var(--radius-sm, 6px) !important;
+  }
+
+  .data-table {
+    min-width: 600px;
+    font-size: 0.8rem !important;
+  }
+
+  .data-table th, .data-table td {
+    padding: 0.45rem 0.4rem !important;
+  }
+
+  /* 10. 모달 팝업 스마트폰 화면 맞춤 */
+  .modal-content {
+    width: 95% !important;
+    max-height: 88vh !important;
+    padding: 1.1rem 0.85rem !important;
+    margin: 0.5rem auto !important;
+    border-radius: 12px !important;
+  }
+
+  .modal-title {
+    font-size: 1.05rem !important;
+  }
+
+  /* 11. 버튼 터치 최적화 (최소 높이 38px) */
+  .btn {
+    min-height: 38px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .btn-sm {
+    min-height: 32px !important;
+    font-size: 0.78rem !important;
+    padding: 0.3rem 0.6rem !important;
+  }
 }
 

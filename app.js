@@ -1032,8 +1032,12 @@ function renderUserRecords() {
       </div>
       <div class="record-actions">
         <button class="btn btn-secondary btn-sm" onclick="openHistoryModal(${item.id})">이력</button>
-        <button class="btn btn-secondary btn-sm" onclick="openEditModal(${item.id})">수정</button>
-        <button class="btn btn-danger btn-sm" onclick="handleDeleteOvertime(${item.id})">삭제</button>
+        ${(!isConf || (currentUser && (currentUser.is_admin === 1 || currentUser.is_super === 1))) ? `
+          <button class="btn btn-secondary btn-sm" onclick="openEditModal(${item.id})">수정</button>
+          <button class="btn btn-danger btn-sm" onclick="handleDeleteOvertime(${item.id})">삭제</button>
+        ` : `
+          <span class="badge" style="background: #ecfdf5; color: #065f46; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; font-weight: 700; border: 1px solid #a7f3d0;" title="승인 완료된 특근은 관리자만 수정 및 삭제할 수 있습니다.">🔒 승인완료 (수정/삭제 불가)</span>
+        `}
       </div>
     `;
     container.appendChild(card);
@@ -1289,6 +1293,11 @@ async function openEditModal(itemId) {
       return;
     }
     const item = data.overtime;
+    const isUserAdmin = currentUser && (currentUser.is_admin === 1 || currentUser.is_super === 1);
+    if (item.is_confirmed === 1 && !isUserAdmin && currentMode === 'user') {
+      showToast('승인 완료된 특근은 관리자만 수정할 수 있습니다.', 'error');
+      return;
+    }
     document.getElementById('editId').value = item.id;
     document.getElementById('editCategory').value = item.category;
     document.getElementById('editStartDate').value = item.start_date;
@@ -1372,6 +1381,14 @@ document.getElementById('editOvertimeForm').addEventListener('submit', async (e)
 });
 
 async function handleDeleteOvertime(itemId) {
+  const isUserAdmin = currentUser && (currentUser.is_admin === 1 || currentUser.is_super === 1);
+  if (currentMode === 'user' && !isUserAdmin) {
+    const cachedItem = userOvertimesData.find(x => x.id === itemId);
+    if (cachedItem && cachedItem.is_confirmed === 1) {
+      showToast('승인 완료된 특근은 관리자만 삭제할 수 있습니다.', 'error');
+      return;
+    }
+  }
   if (!confirm('정말 이 특근 내역을 삭제하시겠습니까? (삭제 이력은 보존됩니다)')) return;
 
   try {
@@ -2622,6 +2639,15 @@ function renderAdminUserRows() {
       roleBadgeHtml = '<span class="badge" style="background:#0284c7; color:#fff; font-weight:700; font-size:0.72rem;">🛡️ 팀관리자</span>';
     }
 
+    let superBtnHtml = '';
+    if (isCurrentUserSuper && u.emp_id.toLowerCase() !== 'ps37082' && u.emp_id !== currentUser.emp_id) {
+      if (u.is_super === 1) {
+        superBtnHtml = `<button type="button" class="btn btn-warning btn-sm demote-super-btn" data-empid="${u.emp_id}" data-name="${escapeHtml(u.name)}" style="padding: 3px 8px; font-size: 0.74rem; font-weight: 700;" title="슈퍼관리자에서 팀관리자로 하야">⬇️ 하야</button>`;
+      } else {
+        superBtnHtml = `<button type="button" class="btn btn-sm promote-super-btn" data-empid="${u.emp_id}" data-name="${escapeHtml(u.name)}" style="padding: 3px 8px; font-size: 0.74rem; font-weight: 700; background: #fef3c7; color: #b45309; border: 1px solid #fde68a;" title="총괄 슈퍼관리자로 승격">👑 슈퍼관리자 승격</button>`;
+      }
+    }
+
     tr.innerHTML = `
       <td><b>${u.emp_id}</b></td>
       <td>${escapeHtml(u.name)}</td>
@@ -2637,13 +2663,34 @@ function renderAdminUserRows() {
         </div>
       </td>
       <td>
-        <div style="display: flex; gap: 4px; align-items: center;">
+        <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+          ${superBtnHtml}
           <button type="button" class="btn btn-secondary btn-sm edit-user-btn" onclick="openUserEditModal('${u.emp_id}')" data-empid="${u.emp_id}" style="padding: 3px 8px; font-size: 0.78rem;">✏️ 수정</button>
           <button type="button" class="btn btn-danger btn-sm delete-user-btn" onclick="handleDeleteUser('${u.emp_id}', '${escapeHtml(u.name)}')" data-empid="${u.emp_id}" data-name="${escapeHtml(u.name)}" ${isSuperUser ? 'disabled title="총괄관리자는 삭제할 수 없습니다"' : ''} style="padding: 3px 8px; font-size: 0.78rem;">삭제</button>
         </div>
       </td>
     `;
     tbody.appendChild(tr);
+  });
+
+  // 슈퍼관리자 승격 이벤트 바인딩
+  tbody.querySelectorAll('.promote-super-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const empId = btn.getAttribute('data-empid');
+      const name = btn.getAttribute('data-name');
+      if (!confirm(`'${name}'(${empId}) 님을 총괄 슈퍼관리자로 승격하시겠습니까?\n\n슈퍼관리자는 전체 부서 특근 승인, 인원 관리 및 시스템 총괄 제어가 가능합니다.`)) return;
+      await updateUserSuperRole(empId, 1);
+    });
+  });
+
+  // 슈퍼관리자 하야 이벤트 바인딩
+  tbody.querySelectorAll('.demote-super-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const empId = btn.getAttribute('data-empid');
+      const name = btn.getAttribute('data-name');
+      if (!confirm(`'${name}'(${empId}) 님의 슈퍼관리자 권한을 해제하고 팀관리자로 하야하시겠습니까?`)) return;
+      await updateUserSuperRole(empId, 0);
+    });
   });
 
   tbody.querySelectorAll('.user-admin-toggle').forEach(tg => {
@@ -2821,6 +2868,31 @@ async function updateUserAdminRole(empId, isAdmin) {
   } catch (err) {
     console.error(err);
     showToast('통신 오류', 'error');
+  }
+}
+
+async function updateUserSuperRole(empId, isSuper) {
+  try {
+    const res = await fetch(`/api/users/${empId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        is_super: isSuper,
+        admin_emp_id: currentUser ? currentUser.emp_id : ''
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.detail || '슈퍼관리자 권한 변경 실패', 'error');
+      loadAdminUserTable();
+      return;
+    }
+    const actionText = isSuper === 1 ? '총괄 슈퍼관리자로 승격되었습니다.' : '팀관리자로 하야 처리되었습니다.';
+    showToast(`'${data.user ? data.user.name : empId}' 님이 ${actionText}`);
+    loadAdminUserTable();
+  } catch (err) {
+    console.error(err);
+    showToast('통신 오류가 발생했습니다.', 'error');
   }
 }
 

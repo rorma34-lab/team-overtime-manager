@@ -37,7 +37,7 @@
         <div class="brand-logo">⏰</div>
         <div>
           <span class="brand-title">스마트 특근 관리</span>
-          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.38</span>
+          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.40</span>
           <span class="brand-subtitle">Smart Overtime System</span>
         </div>
       </div>
@@ -195,9 +195,9 @@
               <!-- 우측: 인터랙티브 스마트 달력 -->
               <div class="calendar-box">
                 <div class="calendar-header">
-                  <button type="button" class="cal-nav-btn" id="calPrevBtn">&lt;</button>
+                  <button type="button" class="cal-nav-btn" id="calPrevBtn" title="이전달">◀</button>
                   <span class="calendar-month-title" id="calMonthTitle">2026년 9월</span>
-                  <button type="button" class="cal-nav-btn" id="calNextBtn">&gt;</button>
+                  <button type="button" class="cal-nav-btn" id="calNextBtn" title="다음달">▶</button>
                 </div>
 
                 <div class="calendar-grid" id="calendarGrid">
@@ -315,9 +315,9 @@
           <!-- 2. 개인 달력 캘린더 뷰 (요구사항 4) -->
           <div id="userCalendarView" style="display: none; padding-top: 0.5rem;">
             <div class="calendar-header" style="margin-bottom: 0.75rem; background: var(--surface); padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border);">
-              <button type="button" class="cal-nav-btn" id="userCalPrevBtn">&lt; 이전달</button>
-              <span class="calendar-month-title" id="userCalMonthTitle" style="font-size: 1.1rem; font-weight: 700;">2026년 9월</span>
-              <button type="button" class="cal-nav-btn" id="userCalNextBtn">다음달 &gt;</button>
+              <button type="button" class="cal-nav-btn" id="userCalPrevBtn">◀ 이전달</button>
+              <span class="calendar-month-title" id="userCalMonthTitle" style="font-weight: 800;">2026년 9월</span>
+              <button type="button" class="cal-nav-btn" id="userCalNextBtn">다음달 ▶</button>
             </div>
             <div class="admin-calendar-wrapper">
               <div class="calendar-grid" id="userCalendarGrid" style="gap: 4px;">
@@ -438,9 +438,9 @@
           <div id="adminCalendarView">
             <div class="admin-calendar-wrapper">
               <div class="calendar-header" style="margin-bottom: 0.75rem;">
-                <button type="button" class="cal-nav-btn" id="adminCalPrevBtn">&lt;</button>
+                <button type="button" class="cal-nav-btn" id="adminCalPrevBtn" title="이전달">◀</button>
                 <span class="calendar-month-title" id="adminCalMonthTitle">2026년 9월</span>
-                <button type="button" class="cal-nav-btn" id="adminCalNextBtn">&gt;</button>
+                <button type="button" class="cal-nav-btn" id="adminCalNextBtn" title="다음달">▶</button>
                 <span style="font-size: 0.82rem; color: var(--text-muted); margin-left: auto;">
                   💡 날짜 칸을 클릭하면 해당일 특근 작업자 상세 목록이 아래에 표시됩니다.
                 </span>
@@ -987,22 +987,55 @@
       </div>
       <div class="modal-body" style="max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1.25rem;">
         
-        <!-- v1.38 (Latest) -->
+        <!-- v1.40 (Latest) -->
         <div style="background: var(--bg-card); border: 2px solid var(--primary); padding: 1.1rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
           <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-            <span style="background: var(--primary); color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.38</span>
+            <span style="background: var(--primary); color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.40</span>
             <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-main);">최신 정식 릴리즈 (Latest)</span>
-            <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-17</span>
+            <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-18</span>
           </div>
           <div style="font-weight: 800; color: var(--primary); margin-bottom: 0.5rem; font-size: 0.88rem;">
-            ⚡ v1.38 Turso 클라우드 초고속 가속화 엔진 & 실시간 진행 피드백 탑재
+            🌟 v1.40 승인 특근 보안 격리, 슈퍼관리자 권한 승격/하야 & 스마트폰 모바일 최적화
           </div>
           <ul style="margin-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.84rem; line-height: 1.6; color: var(--text-main);">
-            <li><b>HTTP Keep-Alive 영구 세션 풀러 구축</b>: 매 쿼리마다 반복되던 TLS 접속 지연을 원천 제거하여 클라우드 DB 응답 속도 최대 5배 단축</li>
-            <li><b>인메모리 스마트 캐시 (Teams & Auth)</b>: 소속팀 목록과 관리자 권한 확인 쿼리를 서버 메모리(0.0001초)에서 즉시 처리하여 네트워크 왕복 70% 축소</li>
+            <li><b>승인 완료 특근 권한 격리</b>: 승인 완료된 특근은 일반 사원이 수정/삭제할 수 없도록 원천 차단(🔒 승인 완료 뱃지 표시) 및 관리자만 수정/삭제 권한 부여</li>
+            <li><b>슈퍼관리자 승격 및 하야 기능</b>: 총괄 슈퍼관리자가 다른 관리자/사원을 슈퍼관리자로 승격하거나 팀관리자로 하야할 수 있는 전용 제어 엔진 구축</li>
+            <li><b>캘린더 이전달/다음달 시인성 상향</b>: 모든 달력의 네비게이션 버튼 크기(38px) 및 글자/아이콘(◀ 이전달 / 다음달 ▶)을 한 단계 확대하여 시원한 조작감 제공</li>
+            <li><b>스마트폰 모바일 완벽 반응형 최적화</b>: 모바일 브라우저 접속 시 헤더 유저칩 래핑, 특근 신청 1단 스택, 터치 패딩 최적화, 관리자 탭 터치 슬라이드 탑재</li>
+            <li><b>사용자 / 관리자 v1.40 최신 공식 PPT 매뉴얼 2종 배포</b>: 신규 기능 및 모바일 가이드 최신화</li>
+          </ul>
+        </div>
+
+        <!-- v1.39 -->
+        <div style="background: var(--bg-subtle); border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-md);">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem;">
+            <span style="background: var(--text-muted); color: #fff; font-size: 0.8rem; font-weight: 700; padding: 2px 10px; border-radius: 9999px;">v1.39</span>
+            <span style="font-size: 0.9rem; font-weight: 700; color: var(--text-main);">이전 릴리즈</span>
+            <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-17</span>
+          </div>
+          <div style="font-weight: 700; color: var(--text-main); margin-bottom: 0.4rem; font-size: 0.84rem;">
+            🛡️ v1.39 클라우드 DB 특근 신청 안정성 강화 & 통신 엔진 개선
+          </div>
+          <ul style="margin-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.84rem; line-height: 1.6; color: var(--text-muted);">
+            <li><b>특근 신청 저장 시 Turso 클라우드 ID 미반환(None) 방어</b>: 스마트 폴백 구축으로 통신 오류 완벽 해결</li>
+            <li><b>멀티스레드 DB 세션 충돌 원천 차단</b>: 백그라운드 감사 로그와 실시간 신청 작업 간 소켓 충돌 방어</li>
+          </ul>
+        </div>
+
+        <!-- v1.38 -->
+        <div style="background: var(--bg-subtle); border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-md);">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem;">
+            <span style="background: var(--text-muted); color: #fff; font-size: 0.8rem; font-weight: 700; padding: 2px 10px; border-radius: 9999px;">v1.38</span>
+            <span style="font-size: 0.9rem; font-weight: 700; color: var(--text-main);">이전 릴리즈</span>
+            <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-17</span>
+          </div>
+          <div style="font-weight: 700; color: var(--text-main); margin-bottom: 0.4rem; font-size: 0.84rem;">
+            ⚡ v1.38 Turso 클라우드 초고속 가속화 엔진 & 실시간 진행 피드백 탑재
+          </div>
+          <ul style="margin-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.84rem; line-height: 1.6; color: var(--text-muted);">
+            <li><b>인메모리 스마트 캐시 (Teams & Auth)</b>: 소속팀 목록과 관리자 권한 확인 쿼리를 서버 메모리에서 즉시 처리하여 네트워크 왕복 70% 축소</li>
             <li><b>비동기 백그라운드 감사 로깅</b>: 접속 로그 및 변경 이력을 백그라운드 큐에서 순차 처리하여 사용자 버튼 클릭 지연 시간 0초화</li>
             <li><b>실시간 진행상황(Loading Spinner) 피드백</b>: 특근 신청/수정, 엑셀 내보내기, 일괄 확인 시 버튼 로딩 스피너 및 알림으로 즉각적인 반응 제공</li>
-            <li><b>사용자 / 관리자 v1.38 최신 공식 PPT 매뉴얼 2종 제공</b>: 고속화 및 진행 피드백 최신 기능 수록</li>
           </ul>
         </div>
 

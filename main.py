@@ -35,7 +35,7 @@ STATIC_DIR = BASE_DIR / "static"
 WEB_BACKUP_DIR = BASE_DIR / "data" / "web_backups"
 WEB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Team Overtime Manager", version="v1.38")
+app = FastAPI(title="Team Overtime Manager", version="v1.40")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -365,19 +365,38 @@ def update_user(emp_id: str, req: UserUpdateRequest):
             conn.close()
             raise HTTPException(status_code=403, detail="팀관리자 지정 권한은 슈퍼관리자만 가능합니다.")
 
+    # 슈퍼관리자 승격 / 하야 요청 검증
+    is_super_val = user_dict.get("is_super", 0)
+    if req.is_super is not None:
+        if not caller_is_super:
+            conn.close()
+            raise HTTPException(status_code=403, detail="슈퍼관리자 승격 및 하야 권한은 슈퍼관리자만 가능합니다.")
+        
+        # 원조 총괄관리자 ps37082 보호
+        if emp_id.lower() == "ps37082" and req.is_super == 0:
+            conn.close()
+            raise HTTPException(status_code=400, detail="원조 총괄 슈퍼관리자(ps37082) 계정은 하야할 수 없습니다.")
+        
+        # 본인 계정 직접 하야 방지 (권한 상실 사고 방지)
+        if req.admin_emp_id and emp_id.strip() == req.admin_emp_id.strip() and req.is_super == 0:
+            conn.close()
+            raise HTTPException(status_code=400, detail="본인 계정을 직접 슈퍼관리자에서 하야할 수 없습니다.")
+        
+        is_super_val = int(req.is_super)
+
     name = req.name if req.name is not None else user_dict["name"]
     team = req.team if req.team is not None else user_dict["team"]
     position = req.position if req.position is not None else user_dict["position"]
     is_admin = req.is_admin if req.is_admin is not None else user_dict["is_admin"]
 
-    # 슈퍼관리자는 관리자 권한 박탈 불가
-    if user_dict.get("is_super", 0) == 1:
+    # 슈퍼관리자는 관리자 권한 필수 부여
+    if is_super_val == 1 or user_dict.get("is_super", 0) == 1:
         is_admin = 1
 
     cursor.execute("""
-    UPDATE users SET name = ?, team = ?, position = ?, is_admin = ?
+    UPDATE users SET name = ?, team = ?, position = ?, is_admin = ?, is_super = ?
     WHERE emp_id = ?
-    """, (name, team, position, is_admin, emp_id))
+    """, (name, team, position, is_admin, is_super_val, emp_id))
 
     # 성명 또는 소속팀 변경 시 기존 특근 내역(overtimes) 일괄 동기화 (트랜잭션)
     if name != user_dict["name"] or team != user_dict["team"]:
@@ -971,6 +990,11 @@ def update_overtime(item_id: int, req: OvertimeUpdateRequest):
         conn.close()
         raise HTTPException(status_code=403, detail="본인 또는 소속팀 관리자만 수정할 수 있습니다.")
 
+    # 요구사항 1: 승인(is_confirmed == 1)된 특근은 관리자만 수정 가능, 일반 사용자는 수정 불가 차단
+    if prev_data.get("is_confirmed") == 1 and not (is_super or is_team_admin):
+        conn.close()
+        raise HTTPException(status_code=403, detail="승인 완료된 특근은 관리자만 수정할 수 있습니다.")
+
     changed_name = caller["name"] if caller else req.changed_by
 
     bonus_clause = ""
@@ -1041,6 +1065,11 @@ def delete_overtime(item_id: int, changed_by: str = Query(...)):
     if not (is_owner or is_super or is_team_admin):
         conn.close()
         raise HTTPException(status_code=403, detail="본인 또는 소속팀 관리자만 삭제할 수 있습니다.")
+
+    # 요구사항 1: 승인(is_confirmed == 1)된 특근은 관리자만 삭제 가능, 일반 사용자는 삭제 불가 차단
+    if prev_data.get("is_confirmed") == 1 and not (is_super or is_team_admin):
+        conn.close()
+        raise HTTPException(status_code=403, detail="승인 완료된 특근은 관리자만 삭제할 수 있습니다.")
 
     changed_name = caller["name"] if caller else changed_by
 
@@ -1831,7 +1860,7 @@ def download_user_manual():
     """사용자 모드 전용 매뉴얼 다운로드 (.pptx)"""
     if not USER_PPTX_PATH.exists():
         create_manual()
-    filename = "특근관리시스템_사용자_매뉴얼(v1.38).pptx"
+    filename = "특근관리시스템_사용자_매뉴얼(v1.40).pptx"
     encoded_filename = quote(filename)
     return FileResponse(
         str(USER_PPTX_PATH),
@@ -1844,7 +1873,7 @@ def download_admin_manual():
     """관리자 모드 전용 운영 매뉴얼 다운로드 (.pptx)"""
     if not ADMIN_PPTX_PATH.exists():
         create_manual()
-    filename = "특근관리시스템_관리자_운영매뉴얼(v1.38).pptx"
+    filename = "특근관리시스템_관리자_운영매뉴얼(v1.40).pptx"
     encoded_filename = quote(filename)
     return FileResponse(
         str(ADMIN_PPTX_PATH),

@@ -705,33 +705,33 @@ def build_user_presentation(images):
     tf1.word_wrap = True
 
     p1_tag = tf1.paragraphs[0]
-    p1_tag.text = "SMART OVERTIME SYSTEM v1.36  |  일반 사원 전용 간편 매뉴얼"
+    p1_tag.text = "SMART OVERTIME SYSTEM v1.40  |  일반 사원 전용 간편 매뉴얼"
     p1_tag.font.size = Pt(14)
     p1_tag.font.bold = True
     p1_tag.font.color.rgb = RGBColor(253, 186, 116)
     p1_tag.space_after = Pt(14)
 
     p1_title = tf1.add_paragraph()
-    p1_title.text = "스마트 특근 관리 시스템\n사용자 전용 기능 매뉴얼 (v1.36)"
+    p1_title.text = "스마트 특근 관리 시스템\n사용자 전용 기능 매뉴얼 (v1.40)"
     p1_title.font.size = Pt(36)
     p1_title.font.bold = True
     p1_title.font.color.rgb = RGBColor(255, 255, 255)
     p1_title.space_after = Pt(20)
 
     p1_sub = tf1.add_paragraph()
-    p1_sub.text = "사원번호 간편 입장, 스마트 달력 신청, 다차원 검색 및 개인 달력 조회까지 누구나 쉽게 따라 할 수 있는 사용자 공식 가이드입니다."
+    p1_sub.text = "사원번호 간편 입장, 스마트 달력 신청, 승인 특근 보안 격리 및 개인 달력 조회까지 누구나 쉽게 따라 할 수 있는 사용자 공식 가이드입니다."
     p1_sub.font.size = Pt(15)
     p1_sub.font.color.rgb = RGBColor(203, 213, 225)
     p1_sub.space_after = Pt(28)
 
     p1_auth = tf1.add_paragraph()
-    p1_auth.text = "배포 버전: v1.36 (2026-09-17)  |  PC 모니터 & 스마트폰(모바일) 완벽 지원"
+    p1_auth.text = "배포 버전: v1.40 (2026-09-18)  |  PC 모니터 & 스마트폰(모바일) 완벽 지원"
     p1_auth.font.size = Pt(13)
     p1_auth.font.color.rgb = RGBColor(148, 163, 184)
 
     # --- SLIDE 2: 1단계 - 사번만 넣고 슝 들어가기 ---
     s2_data = [
-        ("① v1.36 버전 뱃지 확인", "화면 오른쪽 위에 파란색 [v1.36] 뱃지가 보이면 최신 버전입니다. 클릭 시 신규 릴리즈 이력이 표시됩니다."),
+        ("① v1.40 버전 뱃지 확인", "화면 오른쪽 위에 파란색 [v1.40] 뱃지가 보이면 최신 버전입니다. 클릭 시 신규 릴리즈 이력이 표시됩니다."),
         ("② 사원번호 간편 입력", "본인의 사원번호를 입력합니다. 복잡한 비밀번호 없이 빠르게 입장 가능합니다."),
         ("③ [입장하기] 버튼 클릭", "등록된 사원은 이름과 소속팀이 자동 조회되어 즉시 메인 대시보드로 이동합니다."),
         ("④ 미등록 사번 즉시 등록", "처음 방문한 사번은 신규 등록창이 나타나며, 성명과 소속팀을 선택하면 즉시 등록되어 입장합니다.")
@@ -893,27 +893,27 @@ def build_admin_presentation(images):
     tf1.word_wrap = True
 
     p1_tag = tf1.paragraphs[0]
-    p1_tag.text = "SMART OVERTIME SYSTEM v1.36  |  관리자 및 운영자 전용 가이드"
+    p1_tag.text = "SMART OVERTIME SYSTEM v1.40  |  관리자 및 운영자 전용 가이드"
     p1_tag.font.size = Pt(14)
     p1_tag.font.bold = True
     p1_tag.font.color.rgb = RGBColor(253, 186, 116)
     p1_tag.space_after = Pt(14)
 
     p1_title = tf1.add_paragraph()
-    p1_title.text = "스마트 특근 관리 시스템\n관리자 모드 운영 매뉴얼 (v1.36)"
+    p1_title.text = "스마트 특근 관리 시스템\n관리자 모드 운영 매뉴얼 (v1.40)"
     p1_title.font.size = Pt(36)
     p1_title.font.bold = True
     p1_title.font.color.rgb = RGBColor(255, 255, 255)
     p1_title.space_after = Pt(20)
 
     p1_sub = tf1.add_paragraph()
-    p1_sub.text = "보안 감사 로그, 캘린더 색상 범례, 팀원 대리 신청(비밀 보너스), 권한 격리, 실특근 정산 및 엑셀 원장 관리자 공식 가이드입니다."
+    p1_sub.text = "승인 특근 전용 수정/삭제 제어, 슈퍼관리자 승격/하야 엔진, 캘린더 네비게이션 시인성 상향 및 스마트폰 모바일 완벽 반응형 관리자 공식 가이드입니다."
     p1_sub.font.size = Pt(15)
     p1_sub.font.color.rgb = RGBColor(203, 213, 225)
     p1_sub.space_after = Pt(28)
 
     p1_auth = tf1.add_paragraph()
-    p1_auth.text = "배포 버전: v1.36 (2026-09-17)  |  총괄 슈퍼관리자 및 부서 팀관리자 전용"
+    p1_auth.text = "배포 버전: v1.40 (2026-09-18)  |  총괄 슈퍼관리자 및 부서 팀관리자 전용"
     p1_auth.font.size = Pt(13)
     p1_auth.font.color.rgb = RGBColor(148, 163, 184)
 
@@ -1265,7 +1265,7 @@ def build_admin_presentation(images):
     p_step10.font.color.rgb = COLOR_ACCENT
 
     p_title10 = htf10.add_paragraph()
-    p_title10.text = "자주 묻는 질문(Q&A)과 관리자 운영 꿀팁 총정리 (v1.36)"
+    p_title10.text = "자주 묻는 질문(Q&A)과 관리자 운영 꿀팁 총정리 (v1.40)"
     p_title10.font.size = Pt(22)
     p_title10.font.bold = True
     p_title10.font.color.rgb = COLOR_PRIMARY
@@ -1278,9 +1278,9 @@ def build_admin_presentation(images):
     admin_qa_items = [
         ("Q1. 팀관리자가 총괄관리자의 특근 일정을 볼 수 있나요?", "아닙니다. 팀관리자는 총괄관리자의 특근 일정을 일체 열람할 수 없도록 철저히 차단 격리되어 있습니다."),
         ("Q2. 팀원 대리 신청 시 비밀 보너스는 사원에게 노출되나요?", "사원 화면 및 API 응답에서는 0으로 마스킹되어 사원은 전혀 모르며, 오직 관리자와 엑셀 원장에만 기재됩니다."),
-        ("Q3. 팀관리자와 총괄관리자의 권한 차이는 어떻게 되나요?", "팀관리자는 본인 팀원의 승인/수정만 가능하며, 팀원 소속팀 변경 및 관리자 권한 지정은 오직 총괄관리자만 가능합니다."),
-        ("Q4. 시스템 접속 및 보안 감사 로그는 누가 볼 수 있나요?", "오직 총괄 슈퍼관리자만 열람할 수 있으며, 로그인 시도(성공/실패), 신규 등록, 접속 IP 및 User-Agent 정보를 실시간 추적하고 엑셀로 추출합니다."),
-        ("Q5. 웹 저장 및 열기 기능은 일반 사원도 볼 수 있나요?", "사원 화면에서는 숨김 처리되어 일반 사원은 볼 수 없으며, 관리자 모드에서만 안전하게 조작할 수 있습니다.")
+        ("Q3. 팀관리자와 총괄관리자의 권한 차이는 어떻게 되나요?", "팀관리자는 본인 팀원의 승인/수정만 가능하며, 팀원 소속팀 변경, 슈퍼관리자 승격/하야 지정은 오직 총괄관리자만 가능합니다."),
+        ("Q4. 승인 완료된 특근을 사원이 임의로 수정하거나 삭제할 수 있나요?", "아닙니다. v1.40부터 승인된 특근은 일반 사원의 수정/삭제가 원천 차단되며, 오직 관리자 모드에서 관리자만 수정 또는 삭제할 수 있습니다."),
+        ("Q5. 서버가 재부팅되어도 인원과 특근 데이터가 영구 보존되나요?", "네! Turso 클라우드 영구 DB 연동으로 모든 데이터가 안전 보존되며, v1.40의 안전 스마트 폴백과 스레드 보호로 특근 신청과 데이터 무결성을 완벽하게 보장합니다.")
     ]
 
     for i, (q, a) in enumerate(admin_qa_items):

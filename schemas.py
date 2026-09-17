@@ -16,6 +16,7 @@ class UserUpdateRequest(BaseModel):
     team: Optional[str] = None
     position: Optional[str] = None
     is_admin: Optional[int] = None
+    is_super: Optional[int] = None
     admin_emp_id: Optional[str] = None
 
 class OvertimeCreateRequest(BaseModel):
