@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>팀원 특근 신청 및 관리 시스템</title>
   <meta name="description" content="팀원 특근 신청 및 조회, 승인, 엑셀 내보내기 및 모바일 원격 접속 시스템">
-  <link rel="stylesheet" href="/css/style.css?v=20260916_v138">
+  <link rel="stylesheet" href="/css/style.css?v=20260917_v135">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⏰</text></svg>">
   <script>
   function doLogin() {
@@ -37,7 +37,7 @@
         <div class="brand-logo">⏰</div>
         <div>
           <span class="brand-title">스마트 특근 관리</span>
-          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.34</span>
+          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.35</span>
           <span class="brand-subtitle">Smart Overtime System</span>
         </div>
       </div>
@@ -894,22 +894,34 @@
       </div>
       <div class="modal-body" style="max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1.25rem;">
         
-        <!-- v1.34 (Latest) -->
+        <!-- v1.35 (Latest) -->
         <div style="background: var(--bg-card); border: 2px solid var(--primary); padding: 1.1rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
           <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-            <span style="background: var(--primary); color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.34</span>
+            <span style="background: var(--primary); color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.35</span>
             <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-main);">최신 정식 릴리즈 (Latest)</span>
-            <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-16</span>
+            <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-17</span>
           </div>
           <div style="font-weight: 800; color: var(--primary); margin-bottom: 0.5rem; font-size: 0.88rem;">
-            ✨ v1.34 사용자 편의성 및 관리자 캘린더 대폭 강화
+            ✨ v1.35 24시간 클라우드 호스팅 & 파일 자동 호환 완비
           </div>
           <ul style="margin-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.84rem; line-height: 1.6; color: var(--text-main);">
-            <li><b>나의 특근 검색 결과 실시간 통계 바 탑재</b>: 검색 조건에 따라 총 건수 및 총 일수, 승인완료/대기, 일반/법정/대체근무별 집계 현황을 실시간 표시</li>
-            <li><b>특근 신청 날짜 상호 자동 동기화</b>: 시작일 선택 시 종료일도 자동 변경, 종료일 먼저 선택 시 시작일 자동 변경 후 2단계 범위 설정 지원</li>
-            <li><b>관리자 캘린더 보너스 부여 식별(🎁)</b>: 보너스 부여 특근자 이름 앞에 🎁 아이콘 및 보라색 강조 테두리, 일자 헤더에 🎁N명 뱃지 표시</li>
-            <li><b>관리자 캘린더 전원 표시 및 달력 칸 자동 확장</b>: +N명 축약을 완전 제거하고, 인원수에 맞춰 달력 칸이 아래로 시원하게 길어져 모든 인원 노출 및 글자 잘림 완전 해소</li>
-            <li><b>사용자용 / 관리자용 PPT 매뉴얼 2종 분리 및 v1.34 최신화</b>: 일반 사용자와 관리자 권한별 맞춤 매뉴얼 다운로드 제공</li>
+            <li><b>클라우드(Render/Koyeb) 루트 파일 자동 호환</b>: GitHub 업로드 시 폴더 구분 없이 루트에 파일이 올라가도 서버가 자동으로 경로를 인식하여 100% 정상 작동</li>
+            <li><b>상시 가동 클라우드 배포 최적화</b>: 동적 포트($PORT) 자동 바인딩 및 프로덕션 환경 경량 패키징 완비</li>
+            <li><b>사용자용 / 관리자용 v1.35 PPT 매뉴얼 자동 동기화</b>: 최신 기능 설명 탑재 및 PPT 매뉴얼 빌드 완료</li>
+          </ul>
+        </div>
+
+        <!-- v1.34 -->
+        <div style="background: var(--bg-subtle); border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-md);">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem;">
+            <span style="background: var(--text-muted); color: #fff; font-size: 0.8rem; font-weight: 700; padding: 2px 10px; border-radius: 9999px;">v1.34</span>
+            <span style="font-size: 0.9rem; font-weight: 700; color: var(--text-main);">이전 릴리즈</span>
+            <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-16</span>
+          </div>
+          <ul style="margin-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.84rem; line-height: 1.6; color: var(--text-muted);">
+            <li><b>나의 특근 검색 결과 실시간 통계 바 탑재</b>: 총 건수/일수, 승인완료/대기, 특근 구분별 수량 실시간 집계</li>
+            <li><b>특근 신청 날짜 상호 자동 동기화</b>: 시작일/종료일 상호 연동 및 2단계 범위 설정 지원</li>
+            <li><b>관리자 캘린더 보너스(🎁) 표기 및 전원 노출</b>: +N명 축약 제거, 인원수에 맞춰 달력 칸 자동 확장</li>
           </ul>
         </div>
 
@@ -1228,6 +1240,6 @@
 
   <!-- 클라이언트 사이드 고속 엑셀 생성 라이브러리 (SheetJS) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="/js/app.js?v=20260916_v138"></script>
+  <script src="/js/app.js?v=20260917_v135"></script>
 </body>
 </html>

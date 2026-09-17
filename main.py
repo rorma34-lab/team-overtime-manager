@@ -1469,7 +1469,7 @@ def download_user_manual():
     """사용자 모드 전용 매뉴얼 다운로드 (.pptx)"""
     if not USER_PPTX_PATH.exists():
         create_manual()
-    filename = "특근관리시스템_사용자_매뉴얼(v1.34).pptx"
+    filename = "특근관리시스템_사용자_매뉴얼(v1.35).pptx"
     encoded_filename = quote(filename)
     return FileResponse(
         str(USER_PPTX_PATH),
@@ -1482,7 +1482,7 @@ def download_admin_manual():
     """관리자 모드 전용 운영 매뉴얼 다운로드 (.pptx)"""
     if not ADMIN_PPTX_PATH.exists():
         create_manual()
-    filename = "특근관리시스템_관리자_운영매뉴얼(v1.34).pptx"
+    filename = "특근관리시스템_관리자_운영매뉴얼(v1.35).pptx"
     encoded_filename = quote(filename)
     return FileResponse(
         str(ADMIN_PPTX_PATH),
@@ -1498,7 +1498,19 @@ def download_manual(type: str = Query("user", description="user 또는 admin")):
     return download_user_manual()
 
 
-# ----------------- 정적 파일 호스팅 -----------------
+# ----------------- 정적 파일 호스팅 (루트/하위 폴더 자동 호환) -----------------
+(BASE_DIR / "css").mkdir(exist_ok=True)
+(BASE_DIR / "js").mkdir(exist_ok=True)
+(BASE_DIR / "downloads").mkdir(exist_ok=True)
+
+if (BASE_DIR / "style.css").exists() and not (BASE_DIR / "css" / "style.css").exists():
+    import shutil
+    shutil.copy(str(BASE_DIR / "style.css"), str(BASE_DIR / "css" / "style.css"))
+
+if (BASE_DIR / "app.js").exists() and not (BASE_DIR / "js" / "app.js").exists():
+    import shutil
+    shutil.copy(str(BASE_DIR / "app.js"), str(BASE_DIR / "js" / "app.js"))
+
 @app.get("/")
 def serve_index():
     return FileResponse(str(BASE_DIR / "index.html"))
@@ -1507,10 +1519,23 @@ def serve_index():
 def serve_favicon():
     return Response(status_code=204)
 
+@app.get("/style.css")
+@app.get("/css/style.css")
+def serve_css():
+    if (BASE_DIR / "css" / "style.css").exists():
+        return FileResponse(str(BASE_DIR / "css" / "style.css"), media_type="text/css")
+    return FileResponse(str(BASE_DIR / "style.css"), media_type="text/css")
+
+@app.get("/app.js")
+@app.get("/js/app.js")
+def serve_js():
+    if (BASE_DIR / "js" / "app.js").exists():
+        return FileResponse(str(BASE_DIR / "js" / "app.js"), media_type="application/javascript")
+    return FileResponse(str(BASE_DIR / "app.js"), media_type="application/javascript")
+
 app.mount("/css", StaticFiles(directory=str(BASE_DIR / "css")), name="css")
 app.mount("/js", StaticFiles(directory=str(BASE_DIR / "js")), name="js")
-if (BASE_DIR / "downloads").exists():
-    app.mount("/downloads", StaticFiles(directory=str(BASE_DIR / "downloads")), name="downloads")
+app.mount("/downloads", StaticFiles(directory=str(BASE_DIR / "downloads")), name="downloads")
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
