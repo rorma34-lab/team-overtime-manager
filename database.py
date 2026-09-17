@@ -10,22 +10,51 @@ DATA_DIR = BASE_DIR / "data"
 BACKUP_DIR = DATA_DIR / "backups"
 DB_PATH = DATA_DIR / "overtime.db"
 
+# Turso 클라우드 데이터베이스 설정 (Render 환경변수 연동)
+TURSO_DATABASE_URL = os.environ.get("TURSO_DATABASE_URL") or os.environ.get("TURSO_URL")
+TURSO_AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN") or os.environ.get("TURSO_TOKEN")
+
 # 디렉토리 생성
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
+def is_using_turso() -> bool:
+    """Turso 클라우드 데이터베이스 사용 여부 확인"""
+    return bool(TURSO_DATABASE_URL and TURSO_AUTH_TOKEN)
+
+def get_db_mode() -> str:
+    """현재 연결된 데이터베이스 모드 명칭 반환"""
+    return "TURSO_CLOUD" if is_using_turso() else "LOCAL_SQLITE"
+
 def get_db_connection():
-    """SQLite DB 연결 객체 반환 (Row 팩토리 적용, 타임아웃 및 외래키 설정)"""
+    """DB 연결 객체 반환 (Turso 클라우드 DB 또는 로컬 고성능 SQLite 자동 선택)"""
+    if is_using_turso():
+        try:
+            import turso_serverless
+            # turso://, libsql://, https:// 모두 자동 정규화 지원
+            conn = turso_serverless.connect(
+                TURSO_DATABASE_URL.strip(),
+                auth_token=TURSO_AUTH_TOKEN.strip()
+            )
+            conn.row_factory = turso_serverless.Row
+            return conn
+        except Exception as e:
+            print(f"[Turso Connection Error] Fallback to local SQLite: {e}")
+
+    # 로컬 SQLite 연결 (Check same thread 해제, busy timeout 15초)
     conn = sqlite3.connect(str(DB_PATH), check_same_thread=False, timeout=15.0)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA busy_timeout=15000;")
-    conn.execute("PRAGMA foreign_keys=ON;")
+    try:
+        conn.execute("PRAGMA busy_timeout=15000;")
+        conn.execute("PRAGMA foreign_keys=ON;")
+    except Exception:
+        pass
     return conn
 
 
 def create_backup():
-    """데이터 무소실을 위한 스냅샷 백업 생성"""
-    if not DB_PATH.exists():
+    """데이터 무소실을 위한 스냅샷 백업 생성 (로컬 SQLite 모드 전용)"""
+    if is_using_turso() or not DB_PATH.exists():
         return None
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -54,11 +83,17 @@ def create_backup():
 
 def init_db():
     """데이터베이스 및 테이블 초기화, 슈퍼관리자 시딩"""
-    create_backup()
+    if not is_using_turso():
+        create_backup()
     conn = get_db_connection()
-    conn.execute("PRAGMA journal_mode=WAL;")
-    conn.execute("PRAGMA synchronous=NORMAL;")
+    if not is_using_turso():
+        try:
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA synchronous=NORMAL;")
+        except Exception:
+            pass
     cursor = conn.cursor()
+
 
     # 1. 회원(사용자/관리자) 테이블
     cursor.execute("""

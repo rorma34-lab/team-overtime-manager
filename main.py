@@ -34,7 +34,7 @@ STATIC_DIR = BASE_DIR / "static"
 WEB_BACKUP_DIR = BASE_DIR / "data" / "web_backups"
 WEB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Team Overtime Manager", version="1.3.6")
+app = FastAPI(title="Team Overtime Manager", version="v1.37")
 
 def validate_emp_id(emp_id: str):
     """사원번호 유효성 검증:
@@ -125,8 +125,13 @@ def get_system_info(custom_url: Optional[str] = None):
     img.save(buf, format="PNG")
     qr_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
 
+    from database import get_db_mode, is_using_turso
     return {
+        "status": "success",
         "version": app.version,
+        "db_mode": get_db_mode(),
+        "is_turso": is_using_turso(),
+        "storage": "Turso Cloud DB (영구 보존)" if is_using_turso() else "Local SQLite (로컬 저장소)",
         "local_ips": ips,
         "primary_url": target_url,
         "is_custom": bool(custom_url and custom_url.strip()),
@@ -1777,12 +1782,14 @@ def export_access_logs(
 
 # ----------------- PPT 매뉴얼 다운로드 API (사용자용 / 관리자용 분리) -----------------
 
+
+
 @app.get("/api/manual/user")
 def download_user_manual():
     """사용자 모드 전용 매뉴얼 다운로드 (.pptx)"""
     if not USER_PPTX_PATH.exists():
         create_manual()
-    filename = "특근관리시스템_사용자_매뉴얼(v1.36).pptx"
+    filename = "특근관리시스템_사용자_매뉴얼(v1.37).pptx"
     encoded_filename = quote(filename)
     return FileResponse(
         str(USER_PPTX_PATH),
@@ -1795,7 +1802,7 @@ def download_admin_manual():
     """관리자 모드 전용 운영 매뉴얼 다운로드 (.pptx)"""
     if not ADMIN_PPTX_PATH.exists():
         create_manual()
-    filename = "특근관리시스템_관리자_운영매뉴얼(v1.36).pptx"
+    filename = "특근관리시스템_관리자_운영매뉴얼(v1.37).pptx"
     encoded_filename = quote(filename)
     return FileResponse(
         str(ADMIN_PPTX_PATH),
@@ -1809,6 +1816,7 @@ def download_manual(type: str = Query("user", description="user 또는 admin")):
     if type.lower() == "admin":
         return download_admin_manual()
     return download_user_manual()
+
 
 
 # ----------------- 정적 파일 호스팅 (루트/하위 폴더 자동 호환) -----------------
