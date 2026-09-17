@@ -1340,9 +1340,18 @@ def create_manual():
     prs_admin.save(str(PPTX_PATH))
     print(f"✓ Saved System Manual: {PPTX_PATH}")
 
-    # static/downloads 디렉토리 동기화 복사
-    static_dl = Path(__file__).resolve().parent / "static" / "downloads"
+    # 4. 최상위 메인 폴더(루트) 및 static/downloads 디렉토리 동기화 복사
+    root_dir = Path(__file__).resolve().parent
+    static_dl = root_dir / "static" / "downloads"
     static_dl.mkdir(parents=True, exist_ok=True)
+    
+    # 루트 메인 폴더로 복사 (GitHub 업로드 편의)
+    shutil.copy2(str(USER_PPTX_PATH), str(root_dir / "Overtime_User_Manual.pptx"))
+    shutil.copy2(str(ADMIN_PPTX_PATH), str(root_dir / "Overtime_Admin_Manual.pptx"))
+    shutil.copy2(str(PPTX_PATH), str(root_dir / "Overtime_System_Manual.pptx"))
+    print(f"✓ Copied all PPTX manuals to ROOT main directory: {root_dir}")
+
+    # static/downloads로 복사
     shutil.copy2(str(USER_PPTX_PATH), str(static_dl / "Overtime_User_Manual.pptx"))
     shutil.copy2(str(ADMIN_PPTX_PATH), str(static_dl / "Overtime_Admin_Manual.pptx"))
     shutil.copy2(str(PPTX_PATH), str(static_dl / "Overtime_System_Manual.pptx"))

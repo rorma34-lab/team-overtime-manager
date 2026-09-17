@@ -219,11 +219,14 @@ function getThisSaturdayStr() {
   return formatDateStr(sat);
 }
 
-// 사원번호 클라이언트 검증: 공백 및 유효성 확인
+// 사원번호 클라이언트 검증: 1 또는 2로 시작하는 6자리 숫자 (슈퍼관리자 ps37082 제외)
+// 규칙 안내 문구는 노출하지 않고, 불일치 시 '입력이 올바르지 않습니다.'만 표시
 function validateEmpIdClient(empId) {
   empId = (empId || '').trim();
-  if (!empId) {
-    showToast('사원번호를 올바르게 입력해 주세요.', 'warning');
+  if (empId.toLowerCase() === 'ps37082') return true;
+  const regex = /^[12]\d{5}$/;
+  if (!regex.test(empId)) {
+    showToast('입력이 올바르지 않습니다.', 'warning');
     return false;
   }
   return true;

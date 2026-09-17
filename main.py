@@ -4,6 +4,7 @@ import socket
 import io
 import base64
 import sqlite3
+import re
 from datetime import datetime
 from typing import Optional, List
 from pathlib import Path
@@ -36,10 +37,18 @@ WEB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 app = FastAPI(title="Team Overtime Manager", version="1.3.6")
 
 def validate_emp_id(emp_id: str):
-    """사원번호 유효성 검증 (보안 강화: 자릿수 힌트 완전 제거)"""
+    """사원번호 유효성 검증:
+    - 슈퍼관리자(ps37082) 제외
+    - 무조건 숫자 6자리여야 하고 첫 자리가 1 또는 2로 시작 (^[12]\d{5}$)
+    - 안내 문구 미노출 보안 원칙: 실패 시 '입력이 올바르지 않습니다.'만 표시
+    """
     emp_id = (emp_id or "").strip()
     if not emp_id:
-        raise HTTPException(status_code=400, detail="사원번호를 올바르게 입력해 주세요.")
+        raise HTTPException(status_code=400, detail="입력이 올바르지 않습니다.")
+    if emp_id.lower() == "ps37082":
+        return True
+    if not re.match(r"^[12]\d{5}$", emp_id):
+        raise HTTPException(status_code=400, detail="입력이 올바르지 않습니다.")
     return True
 
 def get_client_ip(request: Request) -> str:
@@ -135,10 +144,10 @@ def login_user(req: UserLoginRequest, request: Request):
     ua = request.headers.get("User-Agent", "")[:250]
 
     if not emp_id:
-        log_access_event(emp_id="", action_type="LOGIN", status="FAILURE", ip_address=client_ip, user_agent=ua, details="빈 사원번호 입력")
-        raise HTTPException(status_code=400, detail="사원번호를 입력해 주세요.")
+        log_access_event(emp_id="", action_type="LOGIN", status="FAILURE", ip_address=client_ip, user_agent=ua, details="사원번호 미입력")
+        raise HTTPException(status_code=400, detail="입력이 올바르지 않습니다.")
 
-    # 사원번호 유효성 검사 (6자리 힌트 제거)
+    # 사원번호 유효성 검사 (규칙: 1 또는 2로 시작하는 6자리 숫자, 슈퍼관리자 제외)
     validate_emp_id(emp_id)
 
     conn = get_db_connection()
