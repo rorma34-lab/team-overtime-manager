@@ -17,7 +17,8 @@ import qrcode
 
 from database import (
     init_db, get_db_connection, log_audit, create_backup, DB_PATH,
-    get_all_teams, create_team, delete_team, log_access_event
+    get_all_teams, create_team, delete_team, log_access_event,
+    get_cached_user_role, invalidate_user_role_cache
 )
 from schemas import (
     UserLoginRequest, UserRegisterRequest, UserUpdateRequest,
@@ -34,7 +35,7 @@ STATIC_DIR = BASE_DIR / "static"
 WEB_BACKUP_DIR = BASE_DIR / "data" / "web_backups"
 WEB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Team Overtime Manager", version="v1.37")
+app = FastAPI(title="Team Overtime Manager", version="v1.38")
 
 def validate_emp_id(emp_id: str):
     """사원번호 유효성 검증:
@@ -293,10 +294,9 @@ def list_users(search: Optional[str] = None, admin_emp_id: Optional[str] = None)
 
     req_team = None
     if admin_emp_id:
-        cursor.execute("SELECT is_super, is_admin, team FROM users WHERE emp_id = ?", (admin_emp_id.strip(),))
-        caller = cursor.fetchone()
-        if caller and caller["is_super"] != 1 and caller["is_admin"] == 1:
-            req_team = caller["team"]
+        caller = get_cached_user_role(admin_emp_id)
+        if caller and caller.get("is_super") != 1 and caller.get("is_admin") == 1:
+            req_team = caller.get("team")
 
     query = "SELECT * FROM users WHERE 1=1"
     params = []
@@ -331,11 +331,10 @@ def update_user(emp_id: str, req: UserUpdateRequest):
     caller_is_super = 0
     caller_team = None
     if req.admin_emp_id:
-        cursor.execute("SELECT is_super, is_admin, team FROM users WHERE emp_id = ?", (req.admin_emp_id.strip(),))
-        caller = cursor.fetchone()
+        caller = get_cached_user_role(req.admin_emp_id)
         if caller:
-            caller_is_super = caller["is_super"]
-            caller_team = caller["team"]
+            caller_is_super = caller.get("is_super", 0)
+            caller_team = caller.get("team")
 
     # 팀관리자(is_super=0)의 제약 조건 검증
     if not caller_is_super:
@@ -378,6 +377,7 @@ def update_user(emp_id: str, req: UserUpdateRequest):
     cursor.execute("SELECT * FROM users WHERE emp_id = ?", (emp_id,))
     updated = dict(cursor.fetchone())
     conn.close()
+    invalidate_user_role_cache(emp_id)
     return {"message": "회원 정보가 성공적으로 수정되었습니다.", "user": updated}
 
 @app.get("/api/overtimes/my-stats")
@@ -519,9 +519,8 @@ def delete_user(emp_id: str, admin_emp_id: Optional[str] = None):
 
     # 호출자 권한 확인 (요구사항 2: 팀관리자는 본인 팀만 관리 가능)
     if admin_emp_id:
-        cursor.execute("SELECT is_super, is_admin, team FROM users WHERE emp_id = ?", (admin_emp_id.strip(),))
-        caller = cursor.fetchone()
-        if not caller or (caller["is_super"] != 1 and caller["is_admin"] != 1):
+        caller = get_cached_user_role(admin_emp_id)
+        if not caller or (caller.get("is_super") != 1 and caller.get("is_admin") != 1):
             conn.close()
             raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다.")
         
@@ -561,13 +560,12 @@ def list_teams():
 @app.post("/api/teams")
 def add_team(req: TeamCreateRequest):
     """신규 소속팀 생성 (관리자/슈퍼관리자)"""
+    admin_row = get_cached_user_role(req.admin_emp_id)
+    if not admin_row or (admin_row.get("is_super") != 1 and admin_row.get("is_admin") != 1):
+        raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다.")
+
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT is_super, is_admin FROM users WHERE emp_id = ?", (req.admin_emp_id,))
-    admin_row = cursor.fetchone()
-    if not admin_row or (admin_row["is_super"] != 1 and admin_row["is_admin"] != 1):
-        conn.close()
-        raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다.")
 
     team_name = req.name.strip()
     if not team_name:
@@ -589,13 +587,12 @@ def add_team(req: TeamCreateRequest):
 @app.delete("/api/teams/{team_name}")
 def remove_team(team_name: str, admin_emp_id: str):
     """소속팀 삭제 (관리자/슈퍼관리자 전용, 소속 인원이 없는 경우만 가능)"""
+    admin_row = get_cached_user_role(admin_emp_id)
+    if not admin_row or (admin_row.get("is_super") != 1 and admin_row.get("is_admin") != 1):
+        raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다.")
+
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT is_super, is_admin FROM users WHERE emp_id = ?", (admin_emp_id,))
-    admin_row = cursor.fetchone()
-    if not admin_row or (admin_row["is_super"] != 1 and admin_row["is_admin"] != 1):
-        conn.close()
-        raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다.")
 
     cursor.execute("SELECT COUNT(*) as cnt FROM users WHERE team = ?", (team_name,))
     user_cnt = cursor.fetchone()["cnt"]
@@ -631,25 +628,18 @@ def list_overtimes(
     cursor = conn.cursor()
 
     is_admin_viewer = False
-    # 관리자 정보 확인
-    if admin_emp_id:
-        cursor.execute("SELECT is_super, is_admin, team FROM users WHERE emp_id = ?", (admin_emp_id.strip(),))
-        caller = cursor.fetchone()
-        if caller and (caller["is_super"] == 1 or caller["is_admin"] == 1):
-            is_admin_viewer = True
-        # 팀관리자(is_super=0, is_admin=1)인 경우 본인 소속팀 강제 고정 및 슈퍼관리자 일정 완전 차단
-        if caller and caller["is_super"] != 1 and caller["is_admin"] == 1:
-            team = caller["team"]
+    caller = get_cached_user_role(admin_emp_id) if admin_emp_id else None
+    if caller and (caller.get("is_super") == 1 or caller.get("is_admin") == 1):
+        is_admin_viewer = True
+    if caller and caller.get("is_super") != 1 and caller.get("is_admin") == 1:
+        team = caller.get("team")
 
     query = "SELECT * FROM overtimes WHERE 1=1"
     params = []
 
     # 요구사항 2: 팀관리자는 슈퍼관리자의 특근 일정을 열람할 수 없음
-    if admin_emp_id:
-        cursor.execute("SELECT is_super, is_admin FROM users WHERE emp_id = ?", (admin_emp_id.strip(),))
-        c_chk = cursor.fetchone()
-        if c_chk and c_chk["is_super"] != 1 and c_chk["is_admin"] == 1:
-            query += " AND emp_id NOT IN (SELECT emp_id FROM users WHERE is_super = 1)"
+    if caller and caller.get("is_super") != 1 and caller.get("is_admin") == 1:
+        query += " AND emp_id NOT IN (SELECT emp_id FROM users WHERE is_super = 1)"
 
     if emp_id:
         query += " AND emp_id = ?"
@@ -774,10 +764,9 @@ def get_overtime_summary(
 
     # 팀관리자인 경우 본인 소속팀 강제 고정 및 슈퍼관리자 일정 차단
     if admin_emp_id:
-        cursor.execute("SELECT is_super, is_admin, team FROM users WHERE emp_id = ?", (admin_emp_id.strip(),))
-        caller = cursor.fetchone()
-        if caller and caller["is_super"] != 1 and caller["is_admin"] == 1:
-            team = caller["team"]
+        caller = get_cached_user_role(admin_emp_id)
+        if caller and caller.get("is_super") != 1 and caller.get("is_admin") == 1:
+            team = caller.get("team")
             query += " AND emp_id NOT IN (SELECT emp_id FROM users WHERE is_super = 1)"
 
     if start_date:
@@ -893,9 +882,8 @@ def get_overtime_detail(item_id: int, viewer_emp_id: Optional[str] = None):
     
     is_admin_viewer = False
     if viewer_emp_id:
-        cursor.execute("SELECT is_super, is_admin FROM users WHERE emp_id = ?", (viewer_emp_id.strip(),))
-        u_chk = cursor.fetchone()
-        if u_chk and (u_chk["is_super"] == 1 or u_chk["is_admin"] == 1):
+        u_chk = get_cached_user_role(viewer_emp_id)
+        if u_chk and (u_chk.get("is_super") == 1 or u_chk.get("is_admin") == 1):
             is_admin_viewer = True
 
     item_dict = dict(item)
@@ -1789,7 +1777,7 @@ def download_user_manual():
     """사용자 모드 전용 매뉴얼 다운로드 (.pptx)"""
     if not USER_PPTX_PATH.exists():
         create_manual()
-    filename = "특근관리시스템_사용자_매뉴얼(v1.37).pptx"
+    filename = "특근관리시스템_사용자_매뉴얼(v1.38).pptx"
     encoded_filename = quote(filename)
     return FileResponse(
         str(USER_PPTX_PATH),
@@ -1802,7 +1790,7 @@ def download_admin_manual():
     """관리자 모드 전용 운영 매뉴얼 다운로드 (.pptx)"""
     if not ADMIN_PPTX_PATH.exists():
         create_manual()
-    filename = "특근관리시스템_관리자_운영매뉴얼(v1.37).pptx"
+    filename = "특근관리시스템_관리자_운영매뉴얼(v1.38).pptx"
     encoded_filename = quote(filename)
     return FileResponse(
         str(ADMIN_PPTX_PATH),

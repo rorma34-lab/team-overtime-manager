@@ -7,6 +7,19 @@ window.onerror = function(msg, src, line, col, err) {
   return false;
 };
 
+// ===== 버튼 로딩 스피너 및 진행 피드백 유틸리티 =====
+function setButtonLoading(btn, loadingText = '처리 중...') {
+  if (!btn) return () => {};
+  const originalHtml = btn.innerHTML;
+  const originalDisabled = btn.disabled;
+  btn.disabled = true;
+  btn.innerHTML = `<span style="display:inline-block;width:0.85rem;height:0.85rem;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px;"></span>${loadingText}`;
+  return function restore() {
+    btn.disabled = originalDisabled;
+    btn.innerHTML = originalHtml;
+  };
+}
+
 // ===== 상태 변수 =====
 let currentUser = null;
 let currentMode = 'user'; // 'user' 또는 'admin'
@@ -781,6 +794,9 @@ overtimeForm.addEventListener('submit', async (e) => {
     }
   }
 
+  const submitBtn = overtimeForm.querySelector('button[type="submit"]');
+  const restoreBtn = setButtonLoading(submitBtn, '신청 저장 중...');
+
   try {
     const res = await fetch('/api/overtimes', {
       method: 'POST',
@@ -812,6 +828,8 @@ overtimeForm.addEventListener('submit', async (e) => {
   } catch (err) {
     console.error(err);
     showToast('통신 오류가 발생했습니다. 네트워크를 확인해주세요.', 'error');
+  } finally {
+    restoreBtn();
   }
 });
 
@@ -1321,6 +1339,9 @@ document.getElementById('editOvertimeForm').addEventListener('submit', async (e)
   if (subHolidayDate !== undefined) payload.sub_holiday_date = subHolidayDate;
   if (subHolidayUsed !== undefined) payload.sub_holiday_used = subHolidayUsed;
 
+  const editSubmitBtn = document.getElementById('editOvertimeForm').querySelector('button[type="submit"]');
+  const restoreEditBtn = setButtonLoading(editSubmitBtn, '수정 저장 중...');
+
   try {
     const res = await fetch(`/api/overtimes/${id}`, {
       method: 'PUT',
@@ -1339,6 +1360,8 @@ document.getElementById('editOvertimeForm').addEventListener('submit', async (e)
   } catch (err) {
     console.error(err);
     showToast('수정 중 오류 발생', 'error');
+  } finally {
+    restoreEditBtn();
   }
 });
 
@@ -2292,6 +2315,8 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
     return;
   }
 
+  const exportBtn = document.getElementById('exportExcelBtn');
+  const restoreExportBtn = setButtonLoading(exportBtn, '엑셀 생성 중...');
   showToast('엑셀 파일을 생성 중입니다...');
 
   // 1. 고품질 다중 시트 openpyxl 백엔드 API 우선 호출 (서버 환경)
@@ -2313,10 +2338,13 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
       a.remove();
       window.URL.revokeObjectURL(url);
       showToast('엑셀 다운로드가 완료되었습니다!');
+      restoreExportBtn();
       return;
     }
   } catch (apiErr) {
     console.warn('API export fallback to client-side SheetJS:', apiErr);
+  } finally {
+    restoreExportBtn();
   }
 
   // 2. 오프라인 또는 Vercel 환경 클라이언트 사이드 SheetJS 폴백

@@ -2,8 +2,14 @@ import os
 import sqlite3
 import shutil
 import json
+import time
+import threading
+from queue import Queue
 from datetime import datetime
 from pathlib import Path
+import urllib.parse
+import http.client
+import ssl
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
@@ -26,12 +32,72 @@ def get_db_mode() -> str:
     """현재 연결된 데이터베이스 모드 명칭 반환"""
     return "TURSO_CLOUD" if is_using_turso() else "LOCAL_SQLITE"
 
+# -------------------------------------------------------------
+# ⚡ 1. Turso HTTP Persistent Keep-Alive 세션 최적화 엔진
+# -------------------------------------------------------------
+_TURSO_CONNECTION_POOL = {}
+_TURSO_POOL_LOCK = threading.Lock()
+
+def _get_persistent_turso_client(base_url: str):
+    """Turso 호스트에 대해 TLS 핸드셰이크를 매번 반복하지 않는 영구 Keep-Alive HTTPS 연결 유지"""
+    parsed = urllib.parse.urlparse(base_url)
+    host_key = f"{parsed.hostname}:{parsed.port or 443}"
+    with _TURSO_POOL_LOCK:
+        conn = _TURSO_CONNECTION_POOL.get(host_key)
+        if conn is None:
+            ctx = ssl.create_default_context()
+            conn = http.client.HTTPSConnection(parsed.hostname, parsed.port or 443, context=ctx, timeout=12.0)
+            _TURSO_CONNECTION_POOL[host_key] = conn
+        return conn
+
+def _patch_turso_keepalive():
+    """turso_serverless 라이브러리의 _post 메서드를 Keep-Alive 영구 연결로 고속화"""
+    try:
+        import turso_serverless.session
+        orig_post = turso_serverless.session.Session._post
+
+        def fast_post(self, path: str, body: dict) -> bytes:
+            payload = json.dumps(body, allow_nan=False).encode("utf-8")
+            headers = self._headers()
+            headers["Connection"] = "keep-alive"
+            headers["Content-Length"] = str(len(payload))
+
+            parsed = urllib.parse.urlparse(self._base_url)
+            full_path = f"{parsed.path.rstrip('/')}{path}"
+            if not full_path:
+                full_path = "/"
+
+            conn = _get_persistent_turso_client(self._base_url)
+            try:
+                conn.request("POST", full_path, body=payload, headers=headers)
+                resp = conn.getresponse()
+                if resp.status == 200:
+                    return resp.read()
+                raw = resp.read().decode("utf-8", errors="replace")
+                self._reset_stream()
+                raise RuntimeError(f"HTTP status {resp.status}: {raw}")
+            except Exception as e:
+                with _TURSO_POOL_LOCK:
+                    _TURSO_CONNECTION_POOL.pop(f"{parsed.hostname}:{parsed.port or 443}", None)
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                return orig_post(self, path, body)
+
+        turso_serverless.session.Session._post = fast_post
+        print("[Turso Accelerator] HTTP Keep-Alive persistent connection engine successfully attached.")
+    except Exception as e:
+        print(f"[Turso Accelerator Warning] Could not attach Keep-Alive patch: {e}")
+
+if is_using_turso():
+    _patch_turso_keepalive()
+
 def get_db_connection():
     """DB 연결 객체 반환 (Turso 클라우드 DB 또는 로컬 고성능 SQLite 자동 선택)"""
     if is_using_turso():
         try:
             import turso_serverless
-            # turso://, libsql://, https:// 모두 자동 정규화 지원
             conn = turso_serverless.connect(
                 TURSO_DATABASE_URL.strip(),
                 auth_token=TURSO_AUTH_TOKEN.strip()
@@ -59,7 +125,6 @@ def create_backup():
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_file = BACKUP_DIR / f"overtime_backup_{timestamp}.db"
-        # SQLite 온라인 백업 API 사용 (가장 안전한 방법)
         src = sqlite3.connect(str(DB_PATH), timeout=15.0)
         dst = sqlite3.connect(str(backup_file))
         with dst:
@@ -67,7 +132,6 @@ def create_backup():
         src.close()
         dst.close()
         
-        # 최근 30개 백업 유지, 오래된 백업 정리
         backups = sorted(BACKUP_DIR.glob("overtime_backup_*.db"))
         if len(backups) > 30:
             for old_backup in backups[:-30]:
@@ -93,7 +157,6 @@ def init_db():
         except Exception:
             pass
     cursor = conn.cursor()
-
 
     # 1. 회원(사용자/관리자) 테이블
     cursor.execute("""
@@ -145,7 +208,7 @@ def init_db():
     )
     """)
 
-    # 4. 보안 감사 및 접속 로그 테이블 (신규 요구사항 5)
+    # 4. 보안 감사 및 접속 로그 테이블
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS access_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -168,7 +231,7 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_created ON access_logs(created_at);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_status ON access_logs(status);")
 
-    # 대체휴일 사용 및 보너스 부여 컬럼 마이그레이션 (기존 DB 안전 업그레이드)
+    # 대체휴일 사용 및 보너스 부여 컬럼 마이그레이션
     cursor.execute("PRAGMA table_info(overtimes);")
     columns = [row["name"] for row in cursor.fetchall()]
     if "sub_holiday_used" not in columns:
@@ -178,7 +241,7 @@ def init_db():
     if "bonus_granted" not in columns:
         cursor.execute("ALTER TABLE overtimes ADD COLUMN bonus_granted INTEGER DEFAULT 0;")
 
-    # 4. 소속팀(부서) 관리 테이블 (요구사항 25)
+    # 4. 소속팀(부서) 관리 테이블
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS teams (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -187,7 +250,7 @@ def init_db():
     )
     """)
 
-    # 기본 소속팀 시딩: DB에 소속팀이 하나도 없는 최초 1회 생성 시에만 시딩 (기 삭제된 팀 재부활 완전 방지)
+    # 기본 소속팀 시딩: DB에 소속팀이 하나도 없는 최초 1회 생성 시에만 시딩
     cursor.execute("SELECT COUNT(*) as cnt FROM teams")
     teams_cnt = cursor.fetchone()["cnt"]
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -214,13 +277,65 @@ def init_db():
     conn.commit()
     conn.close()
 
+# -------------------------------------------------------------
+# ⚡ 2. 소속팀 및 권한 인메모리 스마트 캐시 엔진 (반복 쿼리 제거)
+# -------------------------------------------------------------
+_TEAMS_CACHE = {"data": None, "expires": 0}
+_USER_ROLE_CACHE = {} # emp_id -> (role_dict, expire_timestamp)
+_CACHE_LOCK = threading.Lock()
+
+def invalidate_teams_cache():
+    with _CACHE_LOCK:
+        _TEAMS_CACHE["data"] = None
+        _TEAMS_CACHE["expires"] = 0
+
+def invalidate_user_role_cache(emp_id: str = None):
+    with _CACHE_LOCK:
+        if emp_id:
+            _USER_ROLE_CACHE.pop(emp_id.strip(), None)
+        else:
+            _USER_ROLE_CACHE.clear()
+
+def get_cached_user_role(emp_id: str):
+    if not emp_id:
+        return None
+    now = time.time()
+    with _CACHE_LOCK:
+        cached = _USER_ROLE_CACHE.get(emp_id.strip())
+        if cached:
+            role, exp = cached
+            if now < exp:
+                return role
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT is_super, is_admin, team, name, position FROM users WHERE emp_id = ?", (emp_id.strip(),))
+        row = cursor.fetchone()
+        if row:
+            role_dict = dict(row)
+            with _CACHE_LOCK:
+                _USER_ROLE_CACHE[emp_id.strip()] = (role_dict, now + 45.0)
+            return role_dict
+        return None
+    finally:
+        conn.close()
+
 def get_all_teams() -> list:
-    """등록된 소속팀 목록 조회"""
+    """등록된 소속팀 목록 조회 (45초 인메모리 스마트 캐시 적용으로 초고속 반환)"""
+    now = time.time()
+    with _CACHE_LOCK:
+        if _TEAMS_CACHE["data"] is not None and now < _TEAMS_CACHE["expires"]:
+            return _TEAMS_CACHE["data"]
+
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT id, name, created_at FROM teams ORDER BY name ASC")
-        return [dict(row) for row in cursor.fetchall()]
+        data = [dict(row) for row in cursor.fetchall()]
+        with _CACHE_LOCK:
+            _TEAMS_CACHE["data"] = data
+            _TEAMS_CACHE["expires"] = now + 45.0
+        return data
     finally:
         conn.close()
 
@@ -233,6 +348,7 @@ def create_team(name: str) -> dict:
         cursor.execute("INSERT INTO teams (name, created_at) VALUES (?, ?)", (name, now_str))
         team_id = cursor.lastrowid
         conn.commit()
+        invalidate_teams_cache()
         return {"id": team_id, "name": name, "created_at": now_str}
     finally:
         conn.close()
@@ -247,50 +363,66 @@ def delete_team(name: str) -> bool:
             raise ValueError("해당 팀에 등록된 팀원이 존재하여 삭제할 수 없습니다.")
         cursor.execute("DELETE FROM teams WHERE name = ?", (name,))
         conn.commit()
+        invalidate_teams_cache()
         return True
     finally:
         conn.close()
 
-def log_audit(overtime_id: int, action: str, changed_by: str, changed_by_name: str, previous_data: dict = None, new_data: dict = None):
-    """특근 생성/수정/삭제/확인 감사 이력 기록"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cursor.execute("""
-    INSERT INTO overtime_history (overtime_id, action, changed_by, changed_by_name, previous_data, new_data, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (
-        overtime_id,
-        action,
-        changed_by,
-        changed_by_name,
-        json.dumps(previous_data, ensure_ascii=False) if previous_data else None,
-        json.dumps(new_data, ensure_ascii=False) if new_data else None,
-        now_str
-    ))
-    conn.commit()
-    conn.close()
+# -------------------------------------------------------------
+# ⚡ 3. 비동기 백그라운드 감사 로깅 엔진 (응답 지연 0초화)
+# -------------------------------------------------------------
+_LOG_QUEUE = Queue()
 
-def log_access_event(emp_id: str, user_name: str = None, action_type: str = "LOGIN", status: str = "SUCCESS", ip_address: str = "", user_agent: str = "", details: str = ""):
-    """사용자 로그인 시도, 등록, 접속 감사 로그 기록 (신규 요구사항 5)"""
+def _async_log_worker():
+    """백그라운드에서 접속 로그 및 감사 로그를 순차적으로 처리하여 사용자 응답을 가로막지 않음"""
+    while True:
+        try:
+            task_type, payload = _LOG_QUEUE.get()
+            if task_type == "AUDIT":
+                _sync_log_audit(*payload)
+            elif task_type == "ACCESS":
+                _sync_log_access(*payload)
+        except Exception as e:
+            print(f"[Async Log Worker Error] {e}")
+        finally:
+            _LOG_QUEUE.task_done()
+
+_log_thread = threading.Thread(target=_async_log_worker, daemon=True, name="AuditLogWorker")
+_log_thread.start()
+
+def _sync_log_audit(overtime_id, action, changed_by, changed_by_name, prev_json, new_json, now_str):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT INTO overtime_history (overtime_id, action, changed_by, changed_by_name, previous_data, new_data, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (overtime_id, action, changed_by, changed_by_name, prev_json, new_json, now_str))
+        conn.commit()
+    finally:
+        conn.close()
+
+def log_audit(overtime_id: int, action: str, changed_by: str, changed_by_name: str, previous_data: dict = None, new_data: dict = None):
+    """특근 생성/수정/삭제/확인 감사 이력 비동기 기록"""
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    prev_json = json.dumps(previous_data, ensure_ascii=False) if previous_data else None
+    new_json = json.dumps(new_data, ensure_ascii=False) if new_data else None
+    _LOG_QUEUE.put(("AUDIT", (overtime_id, action, changed_by, changed_by_name, prev_json, new_json, now_str)))
+
+def _sync_log_access(emp_id, user_name, action_type, status, ip_address, user_agent, details, now_str):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute("""
         INSERT INTO access_logs (emp_id, user_name, action_type, status, ip_address, user_agent, details, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            emp_id or "",
-            user_name or "",
-            action_type,
-            status,
-            ip_address or "",
-            user_agent or "",
-            details or "",
-            now_str
-        ))
+        """, (emp_id, user_name, action_type, status, ip_address, user_agent, details, now_str))
         conn.commit()
         conn.close()
     except Exception as e:
         print(f"[Access Log Error] {e}")
+
+def log_access_event(emp_id: str, user_name: str = None, action_type: str = "LOGIN", status: str = "SUCCESS", ip_address: str = "", user_agent: str = "", details: str = ""):
+    """사용자 로그인 시도, 등록, 접속 감사 로그 비동기 기록"""
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    _LOG_QUEUE.put(("ACCESS", (emp_id or "", user_name or "", action_type, status, ip_address or "", user_agent or "", details or "", now_str)))
