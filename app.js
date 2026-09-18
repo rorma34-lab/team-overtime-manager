@@ -2228,7 +2228,6 @@ async function togglePreDeductOvertime(itemId, isPreDeduct) {
     showToast('통신 오류가 발생했습니다.', 'error');
   }
 }
-}
 
 // 특근 테이블 헤더 소팅 클릭 바인딩
 document.querySelectorAll('#adminTableView th.sortable').forEach(th => {
