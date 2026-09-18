@@ -1101,18 +1101,26 @@ function renderUserMyStats(list) {
   const curYear = now.getFullYear();
   const curMonth = now.getMonth() + 1; // 1~12
 
-  let monthTotal = 0;
-  let monthConfirmed = 0;
-  let monthActDays = 0.0;
+  // 0. 대체휴무 출장기간 수집
+  const tripRanges = [];
+  list.forEach(item => {
+    const cat = (item.category || '').trim();
+    const ts = (item.trip_start_date || '').trim();
+    const te = (item.trip_end_date || '').trim();
+    if ((cat === '대체휴무' || cat === '대체휴일') && ts && te) {
+      tripRanges.push({ start: ts, end: te });
+    }
+  });
 
-  let halfTotal = 0;
-  let halfConfirmed = 0;
-  let halfActDays = 0.0;
+  let monthTotal = 0, monthConfirmed = 0;
+  let monthNorm = 0, monthPre = 0, monthSub = 0, monthTripPre = 0;
+
+  let halfTotal = 0, halfConfirmed = 0;
+  let halfNorm = 0, halfPre = 0, halfSub = 0, halfTripPre = 0;
   const isFirstHalf = (curMonth <= 6);
 
-  let yearTotal = 0;
-  let yearConfirmed = 0;
-  let yearActDays = 0.0;
+  let yearTotal = 0, yearConfirmed = 0;
+  let yearNorm = 0, yearPre = 0, yearSub = 0, yearTripPre = 0;
 
   list.forEach(item => {
     let d1, d2;
@@ -1130,38 +1138,68 @@ function renderUserMyStats(list) {
     const days = Math.max(1, Math.round((d2 - d1) / (1000 * 60 * 60 * 24)) + 1);
     const subUsed = Number(item.sub_holiday_used || 0);
     const isConf = item.is_confirmed === 1;
+    const isPre = item.is_pre_deduct === 1;
 
-    // 실특근 계산 (일반휴일 - 대체휴무 + 사전차감)
+    const sStr = item.start_date;
+    const eStr = item.end_date || item.start_date;
+    let inTrip = false;
+    if (isPre) {
+      for (const tr of tripRanges) {
+        if (!(eStr < tr.start || sStr > tr.end)) {
+          inTrip = true;
+          break;
+        }
+      }
+    }
+
     const otDays = (item.category === '일반휴일') ? days : 0;
     const subDays = (item.category === '대체휴무' || item.category === '대체휴일') ? days : subUsed;
-    const preDays = (item.is_pre_deduct === 1) ? days : 0;
-    const actDays = Math.max(0, otDays - subDays + preDays);
+    const preCount = isPre ? days : 0;
+    const tripPreCount = inTrip ? days : 0;
 
     // 1. 연간
     if (itemYear === curYear) {
       yearTotal++;
-      yearActDays += actDays;
+      yearNorm += otDays;
+      yearPre += preCount;
+      yearSub += subDays;
+      yearTripPre += tripPreCount;
       if (isConf) yearConfirmed++;
 
       // 2. 반기별
       if (isFirstHalf && (itemMonth >= 1 && itemMonth <= 6)) {
         halfTotal++;
-        halfActDays += actDays;
+        halfNorm += otDays;
+        halfPre += preCount;
+        halfSub += subDays;
+        halfTripPre += tripPreCount;
         if (isConf) halfConfirmed++;
       } else if (!isFirstHalf && (itemMonth >= 7 && itemMonth <= 12)) {
         halfTotal++;
-        halfActDays += actDays;
+        halfNorm += otDays;
+        halfPre += preCount;
+        halfSub += subDays;
+        halfTripPre += tripPreCount;
         if (isConf) halfConfirmed++;
       }
 
       // 3. 월간
       if (itemMonth === curMonth) {
         monthTotal++;
-        monthActDays += actDays;
+        monthNorm += otDays;
+        monthPre += preCount;
+        monthSub += subDays;
+        monthTripPre += tripPreCount;
         if (isConf) monthConfirmed++;
       }
     }
   });
+
+  // 최종 실특근 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무시 작성한 출장기간 이내의 사전차감)
+  const calcAct = (norm, pre, sub, tripPre) => Math.max(0, Math.round((norm - pre - (sub - tripPre)) * 10) / 10);
+  const monthActDays = calcAct(monthNorm, monthPre, monthSub, monthTripPre);
+  const halfActDays = calcAct(halfNorm, halfPre, halfSub, halfTripPre);
+  const yearActDays = calcAct(yearNorm, yearPre, yearSub, yearTripPre);
 
   // UI 엘리먼트 갱신
   const elMonthDays = document.getElementById('myStatMonthDays');
@@ -1234,6 +1272,19 @@ function renderUserCalendar(year, month) {
 
     const isToday = (dateStr === todayStr);
     cell.className = `user-cal-cell ${isToday ? 'today' : ''}`;
+    cell.style.cursor = 'pointer';
+
+    // 캘린더 선택 날짜를 특근 신청 폼의 기본값으로 자동 연동 (요구사항 1)
+    cell.addEventListener('click', () => {
+      calStartDate = dateStr;
+      calEndDate = dateStr;
+      const sInput = document.getElementById('startDateInput');
+      const eInput = document.getElementById('endDateInput');
+      if (sInput) sInput.value = dateStr;
+      if (eInput) eInput.value = dateStr;
+      renderCalendar();
+      showToast(`📅 ${dateStr} 선택됨 (특근 신청일로 자동 지정)`);
+    });
 
     let dateNumColor = 'var(--text-main)';
     if (dayOfWeek === 0) dateNumColor = 'var(--danger)';
@@ -1857,16 +1908,19 @@ function renderAdminCalendar() {
     if (workerCount > 0) {
       dayOvertimes.forEach(o => {
         const hasBonus = o.bonus_granted === 1;
+        const hasPre = o.is_pre_deduct === 1;
         const bonusStyle = hasBonus ? 'border: 1.5px solid #8b5cf6; box-shadow: 0 0 0 1px #a78bfa; font-weight: 700;' : '';
         const bonusPrefix = hasBonus ? '<span style="font-size:0.75rem; margin-right:1px;" title="보너스 부여">🎁</span>' : '';
+        const prePrefix = hasPre ? '<span style="font-size:0.72rem; margin-right:1px;" title="사전차감">⚡</span>' : '';
         const bonusTitle = hasBonus ? ' [🎁보너스 부여]' : '';
-        workerChipsHtml += `<div class="worker-chip ${o.category}${hasBonus ? ' has-bonus' : ''}" style="${bonusStyle}" title="${escapeHtml(o.user_name)} (${o.category})${bonusTitle}">${bonusPrefix}${escapeHtml(o.user_name)}</div>`;
+        const preTitle = hasPre ? ' [⚡사전차감]' : '';
+        workerChipsHtml += `<div class="worker-chip ${o.category}${hasBonus ? ' has-bonus' : ''}" style="${bonusStyle}" title="${escapeHtml(o.user_name)} (${o.category})${bonusTitle}${preTitle}">${bonusPrefix}${prePrefix}${escapeHtml(o.user_name)}</div>`;
       });
     }
-    // 요구사항 26 & 4: 대체휴일 사용 인원도 축약 없이 전체 표시
+    // 요구사항 3 & 4: 대체휴무(대휴) 사용 인원도 고유 클래스로 눈에 띄게 전체 표시
     if (subHolidayCount > 0) {
       daySubHolidays.forEach(s => {
-        workerChipsHtml += `<div class="worker-chip" style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; font-weight:700;" title="대체휴일 사용: ${escapeHtml(s.user_name)} (${s.sub_holiday_used}일)">🏖️ ${escapeHtml(s.user_name)}</div>`;
+        workerChipsHtml += `<div class="worker-chip 대체휴무" title="대체휴무 사용: ${escapeHtml(s.user_name)} (${s.sub_holiday_used}일)">🌿 ${escapeHtml(s.user_name)}</div>`;
       });
     }
 
@@ -1876,7 +1930,7 @@ function renderAdminCalendar() {
         <div style="display:flex; gap:3px; align-items:center;">
           ${workerCount > 0 ? `<span style="font-size:0.7rem; font-weight:700; color:var(--primary);">${workerCount}명</span>` : ''}
           ${bonusCount > 0 ? `<span style="font-size:0.68rem; font-weight:800; color:#6d28d9; background:#ede9fe; padding:1px 4px; border-radius:4px; border:1px solid #c4b5fd;" title="보너스 부여 ${bonusCount}명">🎁${bonusCount}</span>` : ''}
-          ${subHolidayCount > 0 ? `<span style="font-size:0.68rem; font-weight:800; color:#b45309; background:#fef3c7; padding:1px 4px; border-radius:4px; border:1px solid #fde68a;" title="대체휴일 사용 ${subHolidayCount}명">🏖️${subHolidayCount}</span>` : ''}
+          ${subHolidayCount > 0 ? `<span style="font-size:0.68rem; font-weight:800; color:#065f46; background:#d1fae5; padding:1px 4px; border-radius:4px; border:1px solid #a7f3d0;" title="대체휴무 사용 ${subHolidayCount}명">🌿${subHolidayCount}</span>` : ''}
         </div>
       </div>
       <div class="worker-chips-container">
@@ -1931,7 +1985,7 @@ function showDailyWorkers(dateStr, list) {
   tbody.innerHTML = '';
 
   if (list.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:1.5rem; color:var(--text-muted);">${dateStr}에 신청된 특근자가 없습니다.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" style="text-align:center; padding:1.5rem; color:var(--text-muted);">${dateStr}에 신청된 특근자가 없습니다.</td></tr>`;
     return;
   }
 
@@ -1958,8 +2012,14 @@ function showDailyWorkers(dateStr, list) {
       <td style="text-align:center;">
         ${item.bonus_granted === 1 ? '<span class="badge" style="background:#8b5cf6; color:white; font-size:0.75rem; padding:2px 8px; border-radius:9999px; font-weight:700;">🎁 부여</span>' : '<span style="color:#94a3b8; font-size:0.8rem;">-</span>'}
       </td>
+      <td style="text-align:center;">
+        <label class="toggle-switch" title="사전차감 원클릭 전환">
+          <input type="checkbox" class="pre-deduct-toggle" data-id="${item.id}" ${item.is_pre_deduct === 1 ? 'checked' : ''}>
+          <span class="toggle-slider"></span>
+        </label>
+      </td>
       <td>
-        <label class="toggle-switch">
+        <label class="toggle-switch" title="확인(승인) 원클릭 전환">
           <input type="checkbox" class="confirm-toggle" data-id="${item.id}" ${isConf ? 'checked' : ''}>
           <span class="toggle-slider"></span>
         </label>
@@ -1984,25 +2044,35 @@ function showDailyWorkers(dateStr, list) {
     });
   });
 
+  tbody.querySelectorAll('.pre-deduct-toggle').forEach(tg => {
+    tg.addEventListener('change', async () => {
+      const id = parseInt(tg.getAttribute('data-id'), 10);
+      await togglePreDeductOvertime(id, tg.checked);
+    });
+  });
+
   const dailyBatchConfirmBtn = document.getElementById('dailyBatchConfirmBtn');
   const dailyBatchUnconfirmBtn = document.getElementById('dailyBatchUnconfirmBtn');
   if (dailyBatchConfirmBtn) {
-    dailyBatchConfirmBtn.onclick = () => handleDailyBatch(list, 1);
+    dailyBatchConfirmBtn.onclick = () => handleDailyBatch(list, 1, dailyBatchConfirmBtn);
   }
   if (dailyBatchUnconfirmBtn) {
-    dailyBatchUnconfirmBtn.onclick = () => handleDailyBatch(list, 0);
+    dailyBatchUnconfirmBtn.onclick = () => handleDailyBatch(list, 0, dailyBatchUnconfirmBtn);
   }
 
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-async function handleDailyBatch(list, isConfirmed) {
+async function handleDailyBatch(list, isConfirmed, triggerBtn = null) {
   if (!list || list.length === 0) {
     showToast('처리할 작업자가 없습니다.', 'error');
     return;
   }
   const actionName = isConfirmed === 1 ? '일괄 확인(승인)' : '일괄 확인 취소';
   if (!confirm(`당일(${adminSelectedDate}) 특근자 ${list.length}명을 모두 ${actionName} 처리하시겠습니까?`)) return;
+
+  const btn = triggerBtn || (isConfirmed === 1 ? document.getElementById('dailyBatchConfirmBtn') : document.getElementById('dailyBatchUnconfirmBtn'));
+  const restoreBtn = setButtonLoading(btn, isConfirmed === 1 ? '일괄 승인 중...' : '일괄 취소 중...');
 
   const ids = list.map(item => item.id);
   try {
@@ -2011,20 +2081,22 @@ async function handleDailyBatch(list, isConfirmed) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ids: ids,
-        admin_emp_id: currentUser.emp_id,
+        admin_emp_id: currentUser ? currentUser.emp_id : '',
         is_confirmed: isConfirmed
       })
     });
     const data = await res.json();
     if (!res.ok) {
-      showToast(data.detail || '일괄 처리 실패', 'error');
+      showToast(data.detail || '일괄 처리에 실패했습니다.', 'error');
       return;
     }
-    showToast(data.message);
-    loadAdminData();
+    showToast(data.message || `${list.length}건 ${actionName} 완료!`);
+    await loadAdminData();
   } catch (err) {
     console.error(err);
-    showToast('일괄 처리 중 오류 발생', 'error');
+    showToast('일괄 처리 중 통신 오류가 발생했습니다.', 'error');
+  } finally {
+    restoreBtn();
   }
 }
 
@@ -2050,7 +2122,7 @@ function renderAdminOvertimeTable() {
   });
 
   if (list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="13" style="text-align:center; padding: 2rem; color:var(--text-muted);">조건에 일치하는 특근 내역이 없습니다.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="14" style="text-align:center; padding: 2rem; color:var(--text-muted);">조건에 일치하는 특근 내역이 없습니다.</td></tr>';
     return;
   }
 
@@ -2083,8 +2155,14 @@ function renderAdminOvertimeTable() {
       <td style="text-align: center;">
         ${item.bonus_granted === 1 ? `<span class="badge" style="background:#8b5cf6; color:white; font-size:0.75rem; padding:2px 8px; border-radius:9999px; font-weight:700; display:inline-block;">🎁 부여</span>` : `<span style="color:#94a3b8; font-size:0.8rem;">-</span>`}
       </td>
+      <td style="text-align: center;">
+        <label class="toggle-switch" title="사전차감 원클릭 전환">
+          <input type="checkbox" class="pre-deduct-toggle" data-id="${item.id}" ${item.is_pre_deduct === 1 ? 'checked' : ''}>
+          <span class="toggle-slider"></span>
+        </label>
+      </td>
       <td>
-        <label class="toggle-switch">
+        <label class="toggle-switch" title="확인(승인) 원클릭 전환">
           <input type="checkbox" class="confirm-toggle" data-id="${item.id}" ${isConf ? 'checked' : ''}>
           <span class="toggle-slider"></span>
         </label>
@@ -2117,6 +2195,39 @@ function renderAdminOvertimeTable() {
       await toggleConfirmOvertime(id, isConfirmed);
     });
   });
+
+  tbody.querySelectorAll('.pre-deduct-toggle').forEach(tg => {
+    tg.addEventListener('change', async () => {
+      const id = parseInt(tg.getAttribute('data-id'), 10);
+      await togglePreDeductOvertime(id, tg.checked);
+    });
+  });
+}
+
+// 사전차감 원클릭 토글 함수 (요구사항 6)
+async function togglePreDeductOvertime(itemId, isPreDeduct) {
+  try {
+    const res = await fetch(`/api/overtimes/${itemId}/pre-deduct`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        admin_emp_id: currentUser ? currentUser.emp_id : '',
+        is_pre_deduct: isPreDeduct ? 1 : 0
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.detail || '사전차감 상태 변경 실패', 'error');
+      await loadAdminData();
+      return;
+    }
+    showToast(data.message || '사전차감 상태가 변경되었습니다.');
+    await loadAdminData();
+  } catch (err) {
+    console.error(err);
+    showToast('통신 오류가 발생했습니다.', 'error');
+  }
+}
 }
 
 // 특근 테이블 헤더 소팅 클릭 바인딩
@@ -2212,13 +2323,16 @@ async function handleBatchConfirm(isConfirmed) {
   const actionName = isConfirmed === 1 ? '확인(승인)' : '승인 취소';
   if (!confirm(`선택한 ${selectedOvertimeIds.size}건을 일괄 ${actionName} 처리하시겠습니까?`)) return;
 
+  const targetBtn = isConfirmed === 1 ? document.getElementById('batchConfirmBtn') : document.getElementById('batchUnconfirmBtn');
+  const restoreBtn = setButtonLoading(targetBtn, isConfirmed === 1 ? '일괄 승인 중...' : '일괄 취소 중...');
+
   try {
     const res = await fetch('/api/overtimes/batch-confirm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ids: Array.from(selectedOvertimeIds),
-        admin_emp_id: currentUser.emp_id,
+        admin_emp_id: currentUser ? currentUser.emp_id : '',
         is_confirmed: isConfirmed
       })
     });
@@ -2227,15 +2341,17 @@ async function handleBatchConfirm(isConfirmed) {
       showToast(data.detail || '일괄 처리 실패', 'error');
       return;
     }
-    showToast(data.message);
+    showToast(data.message || `${selectedOvertimeIds.size}건 일괄 처리 완료!`);
     selectedOvertimeIds.clear();
     updateSelectedCountText();
     const selectAllEl = document.getElementById('selectAllCheckbox');
     if (selectAllEl) selectAllEl.checked = false;
-    loadAdminData();
+    await loadAdminData();
   } catch (err) {
     console.error(err);
     showToast('일괄 처리 중 오류 발생', 'error');
+  } finally {
+    restoreBtn();
   }
 }
 
@@ -2321,16 +2437,13 @@ if (adminProxyOvertimeBtn) {
     const proxySelect = document.getElementById('proxyUserSelect');
     if (proxySelect) {
       proxySelect.innerHTML = '<option value="">팀원을 선택하세요</option>';
-      const isSuper = currentUser && (currentUser.is_super === 1 || currentUser.emp_id.toLowerCase() === 'ps37082');
       
+      // ps37082 사원번호만 제외하고 모든 팀원 표시 (요구사항 2)
       let candidateUsers = (allUsersCache || []).filter(u => {
-        // 슈퍼관리자 계정 자체는 대리 신청 대상에서 제외
-        if (u.emp_id.toLowerCase() === 'ps37082' || u.is_super === 1) return false;
-        if (isSuper) return true; // 슈퍼관리자는 전 부서 인원 대리 신청 가능
-        return u.team === currentUser.team; // 팀관리자는 자기 팀 인원만 가능
+        return (u.emp_id || '').toLowerCase() !== 'ps37082';
       });
 
-      candidateUsers.sort((a, b) => a.name.localeCompare(b.name));
+      candidateUsers.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
       candidateUsers.forEach(u => {
         const opt = document.createElement('option');
@@ -2340,12 +2453,12 @@ if (adminProxyOvertimeBtn) {
       });
     }
 
-    // 기본값 설정 (토요일 기본값, 프로젝트/장소/사유 예시 가이드)
-    const thisSat = getThisSaturdayStr();
+    // 기본값 설정 (캘린더 선택 날짜 우선 반영, 없으면 토요일 기본값) (요구사항 1)
+    const defaultDate = adminSelectedDate || getThisSaturdayStr();
     const startDateInput = document.getElementById('proxyStartDate');
     const endDateInput = document.getElementById('proxyEndDate');
-    if (startDateInput) startDateInput.value = thisSat;
-    if (endDateInput) endDateInput.value = thisSat;
+    if (startDateInput) startDateInput.value = defaultDate;
+    if (endDateInput) endDateInput.value = defaultDate;
 
     const proxyCategory = document.getElementById('proxyCategory');
     if (proxyCategory) proxyCategory.value = '일반휴일';
@@ -2401,6 +2514,9 @@ if (adminProxyOvertimeForm) {
       return;
     }
 
+    const submitBtn = adminProxyOvertimeForm.querySelector('button[type="submit"]');
+    const restoreBtn = setButtonLoading(submitBtn, '등록 저장 중...');
+
     try {
       const res = await fetch('/api/overtimes', {
         method: 'POST',
@@ -2431,6 +2547,8 @@ if (adminProxyOvertimeForm) {
     } catch (err) {
       console.error(err);
       showToast('통신 오류가 발생했습니다. 네트워크 상태를 확인해주세요.', 'error');
+    } finally {
+      restoreBtn();
     }
   });
 }
@@ -2560,6 +2678,19 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
       }));
 
       // 2. 개인별 휴일합산 정산 시트 (요구사항 27-2, 27-3)
+      // 0. 대체휴무 등록 건들에서 사원별 출장기간 수집
+      const userTrips = {};
+      targetList.forEach(item => {
+        const cat = (item.category || '').trim();
+        const ts = (item.trip_start_date || '').trim();
+        const te = (item.trip_end_date || '').trim();
+        const empId = item.emp_id;
+        if ((cat === '대체휴무' || cat === '대체휴일') && ts && te && empId) {
+          if (!userTrips[empId]) userTrips[empId] = [];
+          userTrips[empId].push({ start: ts, end: te });
+        }
+      });
+
       const userMap = {};
       targetList.forEach(item => {
         let days = 1;
@@ -2580,6 +2711,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
             normal_holiday_days: 0,
             sub_holiday_days: 0,
             pre_deduct_count: 0,
+            trip_pre_deduct_count: 0,
             total_days: 0,
             sub_holiday_used: 0,
             records_count: 0
@@ -2595,14 +2727,27 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
         else if (item.category === '일반휴일') u.normal_holiday_days += days;
         else if (item.category === '대체휴무' || item.category === '대체휴일') u.sub_holiday_days += days;
 
-        if (item.is_pre_deduct === 1) u.pre_deduct_count += 1;
+        if (item.is_pre_deduct === 1) {
+          u.pre_deduct_count += 1;
+          const sStr = item.start_date;
+          const eStr = item.end_date || item.start_date;
+          const trips = userTrips[empId] || [];
+          for (const tr of trips) {
+            if (!(eStr < tr.start || sStr > tr.end)) {
+              u.trip_pre_deduct_count += 1;
+              break;
+            }
+          }
+        }
       });
 
       const userList = Object.values(userMap).sort((a, b) => a.team.localeCompare(b.team) || a.name.localeCompare(b.name));
       const sheet2Rows = userList.map((u, idx) => {
         const totalSub = u.sub_holiday_used + u.sub_holiday_days;
-        const actualOvertime = Math.max(0, Math.round((u.normal_holiday_days - totalSub + u.pre_deduct_count) * 10) / 10);
-        const preRemain = Math.max(0, u.pre_deduct_count - totalSub);
+        // 최종 실특근 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무시 작성한 출장기간 이내의 사전차감)
+        const actualOvertime = Math.max(0, Math.round((u.normal_holiday_days - u.pre_deduct_count - (totalSub - u.trip_pre_deduct_count)) * 10) / 10);
+        // 사전차감 잔여 = 총 사전차감 - 출장내 사전차감
+        const preRemain = Math.max(0, u.pre_deduct_count - u.trip_pre_deduct_count);
         return {
           "순번": idx + 1,
           "사원번호": u.emp_id,
@@ -3499,6 +3644,8 @@ if (btnUpdateCustomQr) {
 async function saveWebBackup() {
   const nameInput = document.getElementById('backupCustomNameInput');
   const customName = nameInput ? nameInput.value.trim() : '';
+  const btn = document.getElementById('btnExecuteWebBackupSave');
+  const restoreBtn = setButtonLoading(btn, '스냅샷 생성 저장 중...');
 
   try {
     const res = await fetch('/api/backup/save', {
@@ -3518,6 +3665,8 @@ async function saveWebBackup() {
   } catch (err) {
     console.error(err);
     showToast('백업 저장 중 통신 오류가 발생했습니다.', 'error');
+  } finally {
+    restoreBtn();
   }
 }
 
@@ -3839,48 +3988,119 @@ if (accessFilterSearchInput) {
   });
 }
 
-// ===== v1.41: 신청자 약식 통계 팝업 =====
+// ===== v1.42: 신청자 상세 특근 통계 팝업 (요구사항 7) =====
 async function showUserStatsPopup(empId, name) {
   try {
     const res = await fetch(`/api/users/${encodeURIComponent(empId)}/overtime-stats`);
     if (!res.ok) { showToast('통계 조회 실패', 'error'); return; }
     const data = await res.json();
-    const periods = data.periods || {};
+    
+    const recentMonths = data.recent_months || [];
+    const quarters = data.quarters || [];
+    const halves = data.halves || [];
     const byYear = data.by_year || {};
-    const periodLabels = [['주간','이번 주'],['월간','이번 달'],['분기별','이번 분기'],['반기별','이번 반기'],['년간','올해']];
-    const tHeader = `<tr style="background:var(--bg-subtle); font-size:0.8rem;">
-      <th style="padding:5px 10px; text-align:left; border-bottom:1px solid var(--border-color);">기간</th>
-      <th style="padding:5px 8px; text-align:center; border-bottom:1px solid var(--border-color);">대체근무</th>
-      <th style="padding:5px 8px; text-align:center; border-bottom:1px solid var(--border-color);">법정휴일</th>
-      <th style="padding:5px 8px; text-align:center; border-bottom:1px solid var(--border-color);">일반휴일</th>
-      <th style="padding:5px 8px; text-align:center; border-bottom:1px solid var(--border-color);">대체휴무</th>
-      <th style="padding:5px 8px; text-align:center; color:#0284c7; border-bottom:1px solid var(--border-color);">사전차감</th>
-      <th style="padding:5px 8px; text-align:center; border-bottom:1px solid var(--border-color);">신청건수</th>
+
+    const tHeader = `<tr style="background:var(--bg-subtle); font-size:0.78rem;">
+      <th style="padding:6px 10px; text-align:left; border-bottom:1px solid var(--border-color); white-space:nowrap;">구분</th>
+      <th style="padding:6px 6px; text-align:center; border-bottom:1px solid var(--border-color); white-space:nowrap;">일반휴일</th>
+      <th style="padding:6px 6px; text-align:center; border-bottom:1px solid var(--border-color); white-space:nowrap;">대체근무</th>
+      <th style="padding:6px 6px; text-align:center; border-bottom:1px solid var(--border-color); white-space:nowrap;">법정휴일</th>
+      <th style="padding:6px 6px; text-align:center; border-bottom:1px solid var(--border-color); color:#065f46; font-weight:700; white-space:nowrap;">대체휴무</th>
+      <th style="padding:6px 8px; text-align:center; border-bottom:1px solid var(--border-color); background:#ecfdf5; color:#047857; font-weight:800; white-space:nowrap;" title="일반특근 - 사전차감 - (대체휴무 - 출장내차감)">★실특근</th>
+      <th style="padding:6px 6px; text-align:center; border-bottom:1px solid var(--border-color); white-space:nowrap;">총사전차감</th>
+      <th style="padding:6px 6px; text-align:center; border-bottom:1px solid var(--border-color); white-space:nowrap;">출장내차감</th>
+      <th style="padding:6px 8px; text-align:center; border-bottom:1px solid var(--border-color); background:#f0f9ff; color:#0369a1; font-weight:800; white-space:nowrap;" title="총사전차감 - 출장내차감">★차감잔여</th>
+      <th style="padding:6px 6px; text-align:center; border-bottom:1px solid var(--border-color); white-space:nowrap;">신청건수</th>
     </tr>`;
-    const mkRow = (label, b) => `<tr>
-      <td style="font-weight:700; color:var(--primary); padding:5px 10px; border-bottom:1px solid var(--border-color);">${label}</td>
-      <td style="text-align:center; padding:5px 8px; border-bottom:1px solid var(--border-color);">${b['대체근무']||0}일</td>
-      <td style="text-align:center; padding:5px 8px; border-bottom:1px solid var(--border-color);">${b['법정휴일']||0}일</td>
-      <td style="text-align:center; padding:5px 8px; border-bottom:1px solid var(--border-color);">${b['일반휴일']||0}일</td>
-      <td style="text-align:center; padding:5px 8px; border-bottom:1px solid var(--border-color);">${b['대체휴무']||0}일</td>
-      <td style="text-align:center; font-weight:700; color:#0284c7; padding:5px 8px; border-bottom:1px solid var(--border-color);">${b['사전차감']||0}회</td>
-      <td style="text-align:center; padding:5px 8px; border-bottom:1px solid var(--border-color);">${b['total_records']||0}건</td>
-    </tr>`;
-    const periodRows = periodLabels.map(([k,l]) => mkRow(l, periods[k]||{})).join('');
-    const yearRows = Object.entries(byYear).map(([yr, b]) => mkRow(`${yr}년`, b)).join('') || '<tr><td colspan="7" style="text-align:center; padding:1rem; color:var(--text-muted);">데이터 없음</td></tr>';
+
+    const mkRow = (label, b) => {
+      const normalH = b['일반휴일'] || 0;
+      const subWork = b['대체근무'] || 0;
+      const legalH = b['법정휴일'] || 0;
+      const subRest = b['대체휴무'] || 0;
+      const totalPre = b['사전차감'] || 0;
+      const tripPre = b['출장내사전차감'] || 0;
+      const actualOt = b['최종실특근'] !== undefined ? b['최종실특근'] : Math.max(0, Math.round((normalH - totalPre - (subRest - tripPre)) * 10) / 10);
+      const remainPre = b['사전차감잔여'] !== undefined ? b['사전차감잔여'] : Math.max(0, totalPre - tripPre);
+      const recCount = b['total_records'] || 0;
+
+      return `<tr>
+        <td style="font-weight:700; color:var(--primary); padding:6px 10px; border-bottom:1px solid var(--border-color); white-space:nowrap;">${escapeHtml(label || '-')}</td>
+        <td style="text-align:center; padding:6px 6px; border-bottom:1px solid var(--border-color);">${normalH}일</td>
+        <td style="text-align:center; padding:6px 6px; border-bottom:1px solid var(--border-color);">${subWork}일</td>
+        <td style="text-align:center; padding:6px 6px; border-bottom:1px solid var(--border-color);">${legalH}일</td>
+        <td style="text-align:center; padding:6px 6px; border-bottom:1px solid var(--border-color); font-weight:700; color:#065f46;">${subRest}일</td>
+        <td style="text-align:center; padding:6px 8px; border-bottom:1px solid var(--border-color); background:#ecfdf5; font-weight:800; color:#047857;">${actualOt}일</td>
+        <td style="text-align:center; padding:6px 6px; border-bottom:1px solid var(--border-color);">${totalPre}회</td>
+        <td style="text-align:center; padding:6px 6px; border-bottom:1px solid var(--border-color);">${tripPre}회</td>
+        <td style="text-align:center; padding:6px 8px; border-bottom:1px solid var(--border-color); background:#f0f9ff; font-weight:800; color:#0369a1;">${remainPre}회</td>
+        <td style="text-align:center; padding:6px 6px; border-bottom:1px solid var(--border-color); color:var(--text-muted);">${recCount}건</td>
+      </tr>`;
+    };
+
+    const toRows = (obj) => {
+      if (!obj) return '';
+      if (Array.isArray(obj)) {
+        return obj.map(item => mkRow(item.label || item.name, item)).join('');
+      }
+      return Object.entries(obj).map(([k, v]) => mkRow(v.label || k, v)).join('');
+    };
+
+    const monthRows = toRows(recentMonths) || '<tr><td colspan="10" style="text-align:center; padding:1rem; color:var(--text-muted);">데이터 없음</td></tr>';
+    const quarterRows = toRows(quarters) || '<tr><td colspan="10" style="text-align:center; padding:1rem; color:var(--text-muted);">데이터 없음</td></tr>';
+    const halfRows = toRows(halves) || '<tr><td colspan="10" style="text-align:center; padding:1rem; color:var(--text-muted);">데이터 없음</td></tr>';
+    const yearRows = (byYear && Object.keys(byYear).length > 0)
+      ? Object.entries(byYear).map(([yr, v]) => mkRow(yr.endsWith('년') ? yr : `${yr}년`, v)).join('')
+      : '<tr><td colspan="10" style="text-align:center; padding:1rem; color:var(--text-muted);">데이터 없음</td></tr>';
+
+    const existingOverlay = document.getElementById('userStatsOverlay');
+    if (existingOverlay) existingOverlay.remove();
+
     document.body.insertAdjacentHTML('beforeend', `
-      <div id="userStatsOverlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:9999; display:flex; align-items:center; justify-content:center;" onclick="if(event.target===this)this.remove()">
-        <div style="background:var(--bg-card); border-radius:16px; padding:1.5rem; max-width:700px; width:94%; max-height:85vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.35); border:1px solid var(--border-color);">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-            <h3 style="margin:0; font-size:1.05rem; color:var(--text-main);">📊 <b>${escapeHtml(name)}</b> (${escapeHtml(empId)}) — ${escapeHtml(data.team||'')} 특근 통계</h3>
-            <button onclick="document.getElementById('userStatsOverlay').remove()" style="border:none; background:none; cursor:pointer; font-size:1.4rem; color:var(--text-muted);">✕</button>
+      <div id="userStatsOverlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:9999; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(2px);" onclick="if(event.target===this)this.remove()">
+        <div style="background:var(--bg-card); border-radius:16px; padding:1.5rem 1.75rem; max-width:840px; width:95%; max-height:88vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.35); border:1.5px solid var(--border-color);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.2rem; padding-bottom:0.75rem; border-bottom:1px solid var(--border-color);">
+            <div>
+              <h3 style="margin:0; font-size:1.15rem; color:var(--text-main); display:flex; align-items:center; gap:8px;">
+                📊 <b>${escapeHtml(name)}</b> <span style="font-size:0.85rem; color:var(--text-muted); font-weight:normal;">(${escapeHtml(empId)} / ${escapeHtml(data.team||'')})</span>
+              </h3>
+              <p style="font-size:0.78rem; color:var(--text-muted); margin:4px 0 0 0;">
+                ★ 실특근 = 일반특근 - 사전차감 - (대체휴무 - 출장내차감)  |  ★ 차감잔여 = 총사전차감 - 출장내차감
+              </p>
+            </div>
+            <button onclick="document.getElementById('userStatsOverlay').remove()" style="border:none; background:none; cursor:pointer; font-size:1.5rem; color:var(--text-muted); line-height:1;">✕</button>
           </div>
-          <div style="font-size:0.87rem; font-weight:700; color:var(--primary); margin-bottom:0.5rem;">📅 기간별 현황</div>
-          <table style="width:100%; border-collapse:collapse; font-size:0.82rem; margin-bottom:1.2rem; border:1px solid var(--border-color); border-radius:8px; overflow:hidden;">${tHeader}${periodRows}</table>
-          <div style="font-size:0.87rem; font-weight:700; color:var(--text-main); margin-bottom:0.5rem;">📆 연도별 현황</div>
-          <table style="width:100%; border-collapse:collapse; font-size:0.82rem; border:1px solid var(--border-color); border-radius:8px; overflow:hidden;">${tHeader}${yearRows}</table>
-          <div style="text-align:right; margin-top:1rem;">
-            <button onclick="document.getElementById('userStatsOverlay').remove()" class="btn btn-secondary btn-sm">닫기</button>
+
+          <div style="font-size:0.88rem; font-weight:700; color:var(--primary); margin-bottom:0.4rem; display:flex; align-items:center; gap:6px;">
+            🗓️ 최근 3개월 현황 (당월 및 직전 2개월)
+          </div>
+          <div style="overflow-x:auto; margin-bottom:1.3rem;">
+            <table style="width:100%; border-collapse:collapse; font-size:0.82rem; border:1px solid var(--border-color); border-radius:8px; overflow:hidden;">${tHeader}${monthRows}</table>
+          </div>
+
+          <div style="font-size:0.88rem; font-weight:700; color:#4338ca; margin-bottom:0.4rem; display:flex; align-items:center; gap:6px;">
+            📊 1~4분기별 현황
+          </div>
+          <div style="overflow-x:auto; margin-bottom:1.3rem;">
+            <table style="width:100%; border-collapse:collapse; font-size:0.82rem; border:1px solid var(--border-color); border-radius:8px; overflow:hidden;">${tHeader}${quarterRows}</table>
+          </div>
+
+          <div style="font-size:0.88rem; font-weight:700; color:#0d9488; margin-bottom:0.4rem; display:flex; align-items:center; gap:6px;">
+            🌗 상반기 / 하반기 현황
+          </div>
+          <div style="overflow-x:auto; margin-bottom:1.3rem;">
+            <table style="width:100%; border-collapse:collapse; font-size:0.82rem; border:1px solid var(--border-color); border-radius:8px; overflow:hidden;">${tHeader}${halfRows}</table>
+          </div>
+
+          <div style="font-size:0.88rem; font-weight:700; color:var(--text-main); margin-bottom:0.4rem; display:flex; align-items:center; gap:6px;">
+            📆 연도별 누적 현황
+          </div>
+          <div style="overflow-x:auto; margin-bottom:1.2rem;">
+            <table style="width:100%; border-collapse:collapse; font-size:0.82rem; border:1px solid var(--border-color); border-radius:8px; overflow:hidden;">${tHeader}${yearRows}</table>
+          </div>
+
+          <div style="text-align:right; margin-top:1.2rem; padding-top:0.75rem; border-top:1px solid var(--border-color);">
+            <button onclick="document.getElementById('userStatsOverlay').remove()" class="btn btn-secondary btn-sm" style="padding:6px 16px;">닫기</button>
           </div>
         </div>
       </div>`);
@@ -3889,6 +4109,195 @@ async function showUserStatsPopup(empId, name) {
     showToast('통계 조회 중 오류 발생', 'error');
   }
 }
+
+// ===== v1.42: 항목별 색상 사용자 설정 (요구사항 4) =====
+const DEFAULT_CHIP_COLORS = {
+  normal: '#b45309',
+  subwork: '#0369a1',
+  legal: '#b91c1c',
+  subrest: '#059669',
+  prededuct: '#0284c7',
+  bonus: '#7c3aed'
+};
+
+function hexToRgba(hex, alpha) {
+  if (!hex || hex.length < 7) return hex;
+  const r = parseInt(hex.slice(1, 3), 16) || 0;
+  const g = parseInt(hex.slice(3, 5), 16) || 0;
+  const b = parseInt(hex.slice(5, 7), 16) || 0;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function applyCustomColors(colors) {
+  const c = Object.assign({}, DEFAULT_CHIP_COLORS, colors || {});
+  let styleEl = document.getElementById('custom-chip-colors-style');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'custom-chip-colors-style';
+    document.head.appendChild(styleEl);
+  }
+
+  styleEl.innerHTML = `
+    :root {
+      --chip-normal-color: ${c.normal};
+      --chip-normal-bg: ${hexToRgba(c.normal, 0.14)};
+      --chip-normal-text: ${c.normal};
+      --chip-normal-border: ${hexToRgba(c.normal, 0.38)};
+
+      --chip-subwork-color: ${c.subwork};
+      --chip-subwork-bg: ${hexToRgba(c.subwork, 0.14)};
+      --chip-subwork-text: ${c.subwork};
+      --chip-subwork-border: ${hexToRgba(c.subwork, 0.38)};
+
+      --chip-legal-color: ${c.legal};
+      --chip-legal-bg: ${hexToRgba(c.legal, 0.14)};
+      --chip-legal-text: ${c.legal};
+      --chip-legal-border: ${hexToRgba(c.legal, 0.38)};
+
+      --chip-subrest-color: ${c.subrest};
+      --chip-subrest-bg: ${hexToRgba(c.subrest, 0.15)};
+      --chip-subrest-text: ${c.subrest};
+      --chip-subrest-border: ${hexToRgba(c.subrest, 0.38)};
+
+      --chip-prededuct-color: ${c.prededuct};
+      --chip-prededuct-bg: ${hexToRgba(c.prededuct, 0.14)};
+      --chip-prededuct-text: ${c.prededuct};
+      --chip-prededuct-border: ${c.prededuct};
+
+      --chip-bonus-color: ${c.bonus};
+      --chip-bonus-bg: ${hexToRgba(c.bonus, 0.14)};
+      --chip-bonus-text: ${c.bonus};
+      --chip-bonus-border: ${hexToRgba(c.bonus, 0.38)};
+    }
+  `;
+
+  // 범례 배지 즉시 스타일 반영
+  const legNormal = document.getElementById('legendChipNormal');
+  if (legNormal) {
+    legNormal.style.background = hexToRgba(c.normal, 0.14);
+    legNormal.style.color = c.normal;
+    legNormal.style.border = `1px solid ${hexToRgba(c.normal, 0.38)}`;
+  }
+  const legSubWork = document.getElementById('legendChipSubWork');
+  if (legSubWork) {
+    legSubWork.style.background = hexToRgba(c.subwork, 0.14);
+    legSubWork.style.color = c.subwork;
+    legSubWork.style.border = `1px solid ${hexToRgba(c.subwork, 0.38)}`;
+  }
+  const legLegal = document.getElementById('legendChipLegal');
+  if (legLegal) {
+    legLegal.style.background = hexToRgba(c.legal, 0.14);
+    legLegal.style.color = c.legal;
+    legLegal.style.border = `1px solid ${hexToRgba(c.legal, 0.38)}`;
+  }
+  const legSubRest = document.getElementById('legendChipSubRest');
+  if (legSubRest) {
+    legSubRest.style.background = hexToRgba(c.subrest, 0.15);
+    legSubRest.style.color = c.subrest;
+    legSubRest.style.border = `1px solid ${hexToRgba(c.subrest, 0.38)}`;
+  }
+  const legPre = document.getElementById('legendChipPreDeduct');
+  if (legPre) {
+    legPre.style.background = hexToRgba(c.prededuct, 0.14);
+    legPre.style.color = c.prededuct;
+    legPre.style.border = `1px solid ${hexToRgba(c.prededuct, 0.38)}`;
+  }
+  const legBonus = document.getElementById('legendChipBonus');
+  if (legBonus) {
+    legBonus.style.background = hexToRgba(c.bonus, 0.14);
+    legBonus.style.color = c.bonus;
+    legBonus.style.border = `1px solid ${hexToRgba(c.bonus, 0.38)}`;
+  }
+}
+
+function initColorSettings() {
+  let savedColors = null;
+  try {
+    const raw = localStorage.getItem('customChipColors');
+    if (raw) savedColors = JSON.parse(raw);
+  } catch (e) {
+    console.warn('[customChipColors load failed]', e);
+  }
+
+  applyCustomColors(savedColors);
+
+  const openBtn = document.getElementById('openColorSettingBtn');
+  if (openBtn) {
+    openBtn.addEventListener('click', () => {
+      let current = DEFAULT_CHIP_COLORS;
+      try {
+        const raw = localStorage.getItem('customChipColors');
+        if (raw) current = Object.assign({}, DEFAULT_CHIP_COLORS, JSON.parse(raw));
+      } catch (e) {}
+
+      const pNormal = document.getElementById('colorPickerNormal');
+      const pSubWork = document.getElementById('colorPickerSubWork');
+      const pLegal = document.getElementById('colorPickerLegal');
+      const pSubRest = document.getElementById('colorPickerSubRest');
+      const pPre = document.getElementById('colorPickerPreDeduct');
+      const pBonus = document.getElementById('colorPickerBonus');
+
+      if (pNormal) pNormal.value = current.normal || DEFAULT_CHIP_COLORS.normal;
+      if (pSubWork) pSubWork.value = current.subwork || DEFAULT_CHIP_COLORS.subwork;
+      if (pLegal) pLegal.value = current.legal || DEFAULT_CHIP_COLORS.legal;
+      if (pSubRest) pSubRest.value = current.subrest || DEFAULT_CHIP_COLORS.subrest;
+      if (pPre) pPre.value = current.prededuct || DEFAULT_CHIP_COLORS.prededuct;
+      if (pBonus) pBonus.value = current.bonus || DEFAULT_CHIP_COLORS.bonus;
+
+      openModal('colorSettingModal');
+    });
+  }
+
+  const saveBtn = document.getElementById('saveColorsBtn');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', () => {
+      const colors = {
+        normal: document.getElementById('colorPickerNormal')?.value || DEFAULT_CHIP_COLORS.normal,
+        subwork: document.getElementById('colorPickerSubWork')?.value || DEFAULT_CHIP_COLORS.subwork,
+        legal: document.getElementById('colorPickerLegal')?.value || DEFAULT_CHIP_COLORS.legal,
+        subrest: document.getElementById('colorPickerSubRest')?.value || DEFAULT_CHIP_COLORS.subrest,
+        prededuct: document.getElementById('colorPickerPreDeduct')?.value || DEFAULT_CHIP_COLORS.prededuct,
+        bonus: document.getElementById('colorPickerBonus')?.value || DEFAULT_CHIP_COLORS.bonus
+      };
+
+      try {
+        localStorage.setItem('customChipColors', JSON.stringify(colors));
+      } catch (e) {}
+
+      applyCustomColors(colors);
+      closeModal('colorSettingModal');
+      showToast('🎨 항목별 맞춤 색상이 저장 및 적용되었습니다!');
+    });
+  }
+
+  const resetBtn = document.getElementById('resetColorsBtn');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      try {
+        localStorage.removeItem('customChipColors');
+      } catch (e) {}
+
+      const pNormal = document.getElementById('colorPickerNormal');
+      const pSubWork = document.getElementById('colorPickerSubWork');
+      const pLegal = document.getElementById('colorPickerLegal');
+      const pSubRest = document.getElementById('colorPickerSubRest');
+      const pPre = document.getElementById('colorPickerPreDeduct');
+      const pBonus = document.getElementById('colorPickerBonus');
+
+      if (pNormal) pNormal.value = DEFAULT_CHIP_COLORS.normal;
+      if (pSubWork) pSubWork.value = DEFAULT_CHIP_COLORS.subwork;
+      if (pLegal) pLegal.value = DEFAULT_CHIP_COLORS.legal;
+      if (pSubRest) pSubRest.value = DEFAULT_CHIP_COLORS.subrest;
+      if (pPre) pPre.value = DEFAULT_CHIP_COLORS.prededuct;
+      if (pBonus) pBonus.value = DEFAULT_CHIP_COLORS.bonus;
+
+      applyCustomColors(DEFAULT_CHIP_COLORS);
+      closeModal('colorSettingModal');
+      showToast('색상 설정이 기본값으로 초기화되었습니다.');
+    });
+  }
+}
+initColorSettings();
 window.showUserStatsPopup = showUserStatsPopup;
 
 // ===== v1.41: user_preferences 자동완성 =====

@@ -218,6 +218,18 @@ def aggregate_user_holidays(records: list, user_positions: dict = None) -> list:
     """개인별 휴일수(대체근무, 법정휴일, 일반휴일, 대체휴무, 사전차감, 최종실특근) 집계"""
     user_positions = user_positions or {}
     user_map = {}
+    user_trips = {}  # emp_id -> [(start, end)]
+
+    # 1차: 대체휴무 출장기간 수집
+    for r in records:
+        emp_id = r.get("emp_id", "")
+        cat = (r.get("category", "") or "").strip()
+        t_s = (r.get("trip_start_date", "") or "").strip()
+        t_e = (r.get("trip_end_date", "") or "").strip()
+        if cat in ["대체휴무", "대체휴일"] and t_s and t_e:
+            if emp_id not in user_trips:
+                user_trips[emp_id] = []
+            user_trips[emp_id].append((t_s, t_e))
 
     for r in records:
         emp_id = r.get("emp_id", "")
@@ -229,10 +241,12 @@ def aggregate_user_holidays(records: list, user_positions: dict = None) -> list:
             cat = "대체휴무"
         sub_used = float(r.get("sub_holiday_used", 0.0) or 0.0)
         is_pre = int(r.get("is_pre_deduct", 0) or 0)
+        s_date = r.get("start_date", "")
+        e_date = r.get("end_date") or s_date
 
         try:
-            d1 = datetime.strptime(r["start_date"], "%Y-%m-%d")
-            d2 = datetime.strptime(r.get("end_date") or r["start_date"], "%Y-%m-%d")
+            d1 = datetime.strptime(s_date, "%Y-%m-%d")
+            d2 = datetime.strptime(e_date, "%Y-%m-%d")
             days = max(1, (d2 - d1).days + 1)
         except Exception:
             days = 1
@@ -246,8 +260,9 @@ def aggregate_user_holidays(records: list, user_positions: dict = None) -> list:
                 "sub_work_days": 0,
                 "legal_holiday_days": 0,
                 "normal_holiday_days": 0,
-                "sub_holiday_days": 0,   # 대체휴무 일수
-                "pre_deduct_count": 0,   # 사전차감 횟수
+                "sub_holiday_days": 0,       # 대체휴무 일수
+                "pre_deduct_count": 0,       # 총 사전차감 횟수
+                "trip_pre_deduct_count": 0,  # 출장기간내 사전차감 횟수
                 "total_days": 0,
                 "sub_holiday_used": 0.0,
                 "actual_overtime_days": 0.0,
@@ -270,13 +285,17 @@ def aggregate_user_holidays(records: list, user_positions: dict = None) -> list:
 
         if is_pre:
             u["pre_deduct_count"] += 1
+            # 출장기간 내 포함 여부 확인
+            trips = user_trips.get(emp_id, [])
+            for ts, te in trips:
+                if not (e_date < ts or s_date > te):
+                    u["trip_pre_deduct_count"] += 1
+                    break
 
-        # 실특근일 = 일반휴일 - 대체휴무 + 사전차감(대체휴무에 해당하는 횟수)
-        # 단순화: pre_deduct_count만큼 대체휴무를 소진한 것으로 계산
-        deducted = u["sub_holiday_used"]
-        pre_offset = min(u["pre_deduct_count"], int(u["sub_holiday_days"]))
-        u["actual_overtime_days"] = max(0.0, round(u["normal_holiday_days"] - deducted + pre_offset, 1))
-        u["pre_deduct_remaining"] = max(0, u["pre_deduct_count"] - pre_offset)
+        # 최종 실특근일 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무시 작성한 출장기간 이내의 사전차감)
+        u["actual_overtime_days"] = max(0.0, round(float(u["normal_holiday_days"] - u["pre_deduct_count"] - (u["sub_holiday_days"] - u["trip_pre_deduct_count"])), 1))
+        # 사전차감 잔여수 = 총사전차감수 - 출장기간내사전차감수 (요구사항 7)
+        u["pre_deduct_remaining"] = max(0, u["pre_deduct_count"] - u["trip_pre_deduct_count"])
 
     user_list = list(user_map.values())
     user_list.sort(key=lambda x: (x["team"], x["name"]))
@@ -319,17 +338,27 @@ def aggregate_team_holidays(user_summaries: list) -> list:
 #  메인 엑셀 생성 함수 1: 특근 신청 내역 전체 (4개 시트)
 # ===========================================================================
 
-def generate_overtime_excel(records: list, user_positions: dict = None) -> io.BytesIO:
+def generate_overtime_excel(records: list, user_positions: dict = None, period_str: str = "") -> io.BytesIO:
     """
     특근 목록 데이터를 openpyxl로 4개 시트 워크북 생성 (요구사항 27-1, 27-2, 27-3)
     - 시트1: [휴일일자별_특근현황]  개별 날짜 전개 (일수=순수 int 1)
-    - 시트2: [개인별_휴일합산_정산표]  인원별 분류별 집계 + SUM 공식
+    - 시트2: [개인별_휴일합산_정산표]  인원별 분류별 집계 + SUM 공식 + 취합날짜/수식표기 (요구사항 8, 9, 10)
     - 시트3: [특근신청_전체원장]  원장 (일수=순수 int)
     - 시트4: [부서별_요약]  팀별 집계
     """
     s = _make_styles()
     wb = Workbook()
     now_str = datetime.now().strftime("%Y년 %m월 %d일 %H:%M")
+
+    if not period_str and records:
+        all_starts = [r.get("start_date") for r in records if r.get("start_date")]
+        all_ends = [r.get("end_date") or r.get("start_date") for r in records if r.get("start_date")]
+        if all_starts and all_ends:
+            min_s = min(all_starts)
+            max_e = max(all_ends)
+            period_str = f"{min_s} ~ {max_e}"
+    if not period_str:
+        period_str = "전체 기간"
 
     # ─────────────────────────────────────────────
     # 시트 1: 휴일일자별_특근현황
@@ -339,7 +368,7 @@ def generate_overtime_excel(records: list, user_positions: dict = None) -> io.By
 
     _write_title(ws1,
                  "일자별 휴일 특근(초과근무) 상세 현황",
-                 f"출력일시: {now_str}  |  신청 내역을 개별 휴일 날짜 단위로 전개  |  일수 단위: 순수 숫자",
+                 f"취합 기간: {period_str}  |  출력일시: {now_str}  |  신청 내역을 개별 휴일 날짜 단위로 전개  |  일수 단위: 순수 숫자",
                  16, s)
 
     headers1 = [
@@ -418,14 +447,14 @@ def generate_overtime_excel(records: list, user_positions: dict = None) -> io.By
     ws2 = wb.create_sheet(title="개인별_휴일합산_정산표")
     _write_title(ws2,
                  "개인별 특근 휴일수 세부 합산 및 최종 실특근일 정산표",
-                 f"산출식: [일반휴일] - [대체휴가 사용일수] + [사전차감] = [★최종 실특근일]  (대체근무·법정휴일 제외)  |  출력일시: {now_str}",
-                 14, s)
+                 f"취합 기간: {period_str}  |  취합 일시: {now_str}  |  수식: [★최종 실특근일] = [일반특근] - [사전차감] - ([대체휴무] - [출장내사전차감])  /  [사전차감 잔여수] = [총사전차감] - [출장내사전차감]",
+                 15, s)
 
     headers2 = [
         "순번", "사원번호", "성명", "소속팀", "직급",
         "대체근무 (일)", "법정휴일 (일)", "일반휴일 (일)", "대체휴무 (일)",
-        "총 특근일수 (일)", "대체휴가 사용일수 (일)", "사전차감 (회)", "사전차감 잔여 (회)",
-        "★ 최종 실특근일 (일)", "신청건수"
+        "총 특근일수\n(대체+법정+일반)", "대체휴가 사용일수 (일)", "총 사전차감 (회)", "사전차감 잔여수\n(총사전차감 - 출장내사전차감)",
+        "★ 최종 실특근일\n(일반특근-사전차감-(대휴-출장내차감)) [일]", "신청건수"
     ]
     fills2 = [None, None, None, None, None,
               s["fill_slate"], s["fill_slate"], s["fill_navy"], s["fill_navy"],
@@ -554,12 +583,12 @@ def generate_overtime_excel(records: list, user_positions: dict = None) -> io.By
     ws4 = wb.create_sheet(title="부서별_요약")
     _write_title(ws4,
                  "부서(소속팀)별 특근 휴일 현황 총괄표",
-                 f"부서별 인원수 및 분류별 휴일일수 합산  |  출력일시: {now_str}",
+                 f"취합 기간: {period_str}  |  출력 일시: {now_str}  |  수식: [★ 팀 최종 실특근일] = 팀원 [★최종 실특근일] 합계",
                  10, s)
 
     headers4 = [
         "순번", "소속팀", "소속 인원수", "대체근무 (일)", "법정휴일 (일)",
-        "일반휴일 (일)", "총 특근일수 (일)", "대체휴가 사용일수 (일)", "★ 팀 최종 실특근일 (일)", "총 신청건수"
+        "일반휴일 (일)", "총 특근일수\n(대체+법정+일반)", "대체휴가 사용일수 (일)", "★ 팀 최종 실특근일\n(일반특근-사전차감-(대휴-출장내차감)) [일]", "총 신청건수"
     ]
     fills4 = [None, None, None, s["fill_slate"], s["fill_slate"],
               s["fill_navy"], s["fill_navy"], s["fill_navy"], s["fill_teal"], None]
@@ -648,7 +677,7 @@ def generate_settlement_excel(
 
     _write_title(ws1,
                  "★ 개인별 최종 실특근일 정산표",
-                 f"{period_str}  |  산출식: [일반휴일] - [대체휴가 사용일수] + [사전차감] = [★최종 실특근일]  |  출력일시: {now_str}",
+                 f"{period_str}  |  산출식: [일반휴일] - [사전차감] - ([대체휴가 사용일수] - [출장내사전차감]) = [★최종 실특근일]  |  출력일시: {now_str}",
                  13, s)
 
     headers1 = [

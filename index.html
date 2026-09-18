@@ -37,7 +37,7 @@
         <div class="brand-logo">⏰</div>
         <div>
           <span class="brand-title">스마트 특근 관리</span>
-          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.41</span>
+          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.42</span>
           <span class="brand-subtitle">Smart Overtime System</span>
         </div>
       </div>
@@ -463,24 +463,30 @@
               </div>
             </div>
 
-            <!-- 관리자 캘린더 색상 범례 (요구사항 1) -->
+            <!-- 관리자 캘린더 색상 범례 (요구사항 3, 4) -->
             <div class="calendar-legend" style="margin-top: 0.75rem; margin-bottom: 0.75rem; font-size: 0.8rem; display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; background: var(--surface); padding: 0.6rem 1rem; border-radius: 8px; border: 1px solid var(--border);">
               <span style="font-weight: 700; color: var(--text-main); margin-right: 4px;">🏷️ 색상 범례:</span>
               <span style="display: inline-flex; align-items: center; gap: 4px;">
-                <span class="worker-chip 일반휴일" style="padding: 2px 8px; font-size: 0.75rem; border-radius: 4px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a;">일반휴일</span> (수당 특근)
+                <span class="worker-chip 일반휴일" id="legendChipNormal" style="padding: 2px 8px; font-size: 0.75rem; border-radius: 4px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a;">일반휴일</span> (수당 특근)
               </span>
               <span style="display: inline-flex; align-items: center; gap: 4px;">
-                <span class="worker-chip 대체근무" style="padding: 2px 8px; font-size: 0.75rem; border-radius: 4px; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">대체근무</span> (대휴 발생)
+                <span class="worker-chip 대체근무" id="legendChipSubWork" style="padding: 2px 8px; font-size: 0.75rem; border-radius: 4px; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">대체근무</span> (대휴 발생)
               </span>
               <span style="display: inline-flex; align-items: center; gap: 4px;">
-                <span class="worker-chip 법정휴일" style="padding: 2px 8px; font-size: 0.75rem; border-radius: 4px; background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca;">법정휴일</span> (유급 휴일)
+                <span class="worker-chip 법정휴일" id="legendChipLegal" style="padding: 2px 8px; font-size: 0.75rem; border-radius: 4px; background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca;">법정휴일</span> (유급 휴일)
               </span>
               <span style="display: inline-flex; align-items: center; gap: 4px;">
-                <span class="worker-chip" style="background:#fef3c7; color:#b45309; font-weight:700; padding: 2px 6px; border: 1px solid #fde68a;">🏖️ 홍길동</span> 대체휴일 사용
+                <span class="worker-chip 대체휴무" id="legendChipSubRest" style="padding: 2px 8px; font-size: 0.75rem; border-radius: 4px; background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; font-weight: 700;">🌿 대체휴무</span> (휴무 사용)
               </span>
-              <span style="display: inline-flex; align-items: center; gap: 4px; margin-left: auto;">
-                <span class="badge" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; font-size:0.75rem;">🎁 보너스</span> 보너스 부여 대상
+              <span style="display: inline-flex; align-items: center; gap: 4px;">
+                <span class="badge" id="legendChipPreDeduct" style="background:#e0f2fe; color:#0284c7; border:1px solid #bae6fd; font-size:0.75rem; font-weight:700;">⚡ 사전차감</span>
               </span>
+              <span style="display: inline-flex; align-items: center; gap: 4px;">
+                <span class="badge" id="legendChipBonus" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; font-size:0.75rem;">🎁 보너스</span> 보너스 부여
+              </span>
+              <button type="button" class="btn btn-secondary btn-sm" id="openColorSettingBtn" style="margin-left: auto; padding: 3px 9px; font-size: 0.76rem;" title="각 항목별 색상 사용자 맞춤 설정">
+                🎨 색상 설정
+              </button>
             </div>
 
             <!-- 해당일 클릭 시 나타나는 작업자 상세 패널 -->
@@ -508,6 +514,7 @@
                       <th>장소</th>
                       <th>사유</th>
                       <th>보너스</th>
+                      <th>사전차감</th>
                       <th>확인(승인)</th>
                       <th>확인자</th>
                       <th>관리</th>
@@ -584,6 +591,7 @@
                     <th>장소</th>
                     <th>사유</th>
                     <th class="sortable" data-sort="bonus_granted">보너스 <span class="sort-icon">↕</span></th>
+                    <th class="sortable" data-sort="is_pre_deduct">사전차감 <span class="sort-icon">↕</span></th>
                     <th class="sortable" data-sort="is_confirmed">확인(승인) <span class="sort-icon">↕</span></th>
                     <th>확인자</th>
                     <th>관리</th>
@@ -1002,17 +1010,40 @@
       </div>
       <div class="modal-body" style="max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1.25rem;">
         
-        <!-- v1.41 (Latest) -->
+        <!-- v1.42 (Latest) -->
         <div style="background: var(--bg-card); border: 2px solid var(--primary); padding: 1.1rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
           <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-            <span style="background: var(--primary); color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.41</span>
+            <span style="background: var(--primary); color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.42</span>
             <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-main);">최신 정식 릴리즈 (Latest)</span>
             <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-18</span>
           </div>
           <div style="font-weight: 800; color: var(--primary); margin-bottom: 0.5rem; font-size: 0.88rem;">
-            ⚡ v1.41 사전차감 토글, 대체휴무 체계 개편, 권한 3단계 관리 & 신청자 통계 팝업
+            🎯 v1.42 캘린더 날짜 디폴트, 색상 커스텀, 리스트 사전차감 토글 & 통계·엑셀 전면 고도화
           </div>
           <ul style="margin-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.84rem; line-height: 1.6; color: var(--text-main);">
+            <li><b>캘린더 선택 날짜 자동 디폴트 연동</b>: 달력에서 날짜 클릭 후 특근 신청 또는 대리신청 시 선택한 날짜가 자동으로 기본 지정</li>
+            <li><b>대리신청 팀원 목록 최적화</b>: 팀원 특근/휴무 신청 드롭다운에서 슈퍼관리자(ps37082)만 제외하고 모든 팀원 누락 없이 표시</li>
+            <li><b>관리자 캘린더 대체휴무 범례 및 칩 디자인 강화</b>: 범례에 대체휴무 항목 추가 및 눈에 띄는 전용 칩 스타일 적용</li>
+            <li><b>항목별 색상 사용자 맞춤 설정 (Color Picker)</b>: 일반/법정/대체근무/대체휴무/사전차감/보너스 색상을 사용자가 직접 커스텀 변경 및 저장</li>
+            <li><b>DB 저장 및 기록 버튼 진행 상태 피드백</b>: 신청/수정/삭제/확인 시 버튼 비활성화 및 로딩 스피너와 '진행중/등록중' 명확한 안내</li>
+            <li><b>리스트(테이블) 사전차감 원클릭 토글 스위치</b>: 확인(승인)처럼 작업자 목록 및 전체특근 테이블에서 사전차감을 즉시 원클릭 토글</li>
+            <li><b>특근 통계 개편 & 사전차감 잔여수 산출</b>: 최근 3개월(7/8/9월), 1~4분기, 상/하반기, 연도별 집계 및 [사전차감 잔여수 = 총사전차감 - 출장기간내사전차감] 산출</li>
+            <li><b>엑셀 취합 일시/기간 표기 & 셀제목 수식 명시</b>: 개인별 정산표 상단에 취합 기간 및 일시 명시, [일반특근 - 사전차감 - (대체휴무 - 출장내차감)] 등 헤더에 산출식 표기</li>
+            <li><b>최종 실특근일 공식 표준화</b>: [최종 실특근 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무시 작성한 출장기간 이내의 사전차감)]으로 시스템 전반 통일</li>
+          </ul>
+        </div>
+
+        <!-- v1.41 -->
+        <div style="background: var(--bg-subtle); border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-md);">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem;">
+            <span style="background: var(--text-muted); color: #fff; font-size: 0.8rem; font-weight: 700; padding: 2px 10px; border-radius: 9999px;">v1.41</span>
+            <span style="font-size: 0.9rem; font-weight: 700; color: var(--text-main);">이전 릴리즈</span>
+            <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-18</span>
+          </div>
+          <div style="font-weight: 700; color: var(--text-main); margin-bottom: 0.4rem; font-size: 0.84rem;">
+            ⚡ v1.41 사전차감 토글, 대체휴무 체계 개편, 권한 3단계 관리 & 신청자 통계 팝업
+          </div>
+          <ul style="margin-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.84rem; line-height: 1.6; color: var(--text-muted);">
             <li><b>팀원 권한 3단계 관리 체계</b>: 관리자 권한 탭 내에서 팀원 ↔ 팀관리자 ↔ 슈퍼관리자를 3단계 드롭다운으로 직관적이고 단계적으로 설정</li>
             <li><b>신규 특근 신청 자동완성</b>: 최근 입력한 프로젝트 번호와 근무 장소를 사용자(사원번호)별로 안전하게 기억하여 다음 신청 시 디폴트 자동 입력</li>
             <li><b>'대체휴일' → '대체휴무' 용어 전면 변경</b>: 제도 명칭 표준화 반영</li>
@@ -1020,7 +1051,6 @@
             <li><b>신청자 약식 통계 사이드 팝업</b>: 관리자 테이블에서 신청자 이름 클릭 시 주간/월간/분기/반기/연간/전체 특근·대체휴무·사전차감 잔여 횟수 즉시 조회</li>
             <li><b>팀원 특근/대체휴무 대리신청 화면 강화</b>: 대체휴무 분류 추가, 대체휴무 시 출장기간(시작/종료일) 지정 및 사전차감 동시 처리 지원</li>
             <li><b>엑셀 내보내기 필터 연동 & 정산표 수집 기간 표시</b>: 화면에서 필터링된 인원 및 사전차감/대체휴무/출장기간 컬럼 포함, 개인별 정산표에 수집 기간 기재</li>
-            <li><b>실특근일 계산 공식 정밀화</b>: [실특근일 = 일반휴일 - 대체휴무 + 사전차감(출장기간 내)] 및 사전차감 잔여횟수 산출 반영</li>
           </ul>
         </div>
 
@@ -1483,11 +1513,59 @@
     </div>
   </div>
 
+  <!-- 🎨 각 항목별 색상 사용자 설정 모달 (요구사항 4) -->
+  <div class="modal-overlay" id="colorSettingModal">
+    <div class="modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 class="modal-title">🎨 항목별 색상 커스텀 설정</h3>
+        <button class="modal-close" data-close="colorSettingModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 1.1rem; line-height: 1.5;">
+          달력 범례와 칩에 표시되는 각 특근 및 휴무 항목의 색상을 직접 지정할 수 있습니다. 변경된 색상은 브라우저에 영구 보존됩니다.
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: var(--bg-subtle); border-radius: 8px;">
+            <span style="font-size: 0.88rem; font-weight: 600; color: var(--text-main);">📅 일반휴일 (수당 특근)</span>
+            <input type="color" id="colorPickerNormal" value="#b45309" style="width: 42px; height: 32px; border: none; cursor: pointer; border-radius: 4px; background: none;">
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: var(--bg-subtle); border-radius: 8px;">
+            <span style="font-size: 0.88rem; font-weight: 600; color: var(--text-main);">🔄 대체근무 (대휴 발생)</span>
+            <input type="color" id="colorPickerSubWork" value="#0369a1" style="width: 42px; height: 32px; border: none; cursor: pointer; border-radius: 4px; background: none;">
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: var(--bg-subtle); border-radius: 8px;">
+            <span style="font-size: 0.88rem; font-weight: 600; color: var(--text-main);">⚖️ 법정휴일 (유급 휴일)</span>
+            <input type="color" id="colorPickerLegal" value="#b91c1c" style="width: 42px; height: 32px; border: none; cursor: pointer; border-radius: 4px; background: none;">
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: var(--bg-subtle); border-radius: 8px;">
+            <span style="font-size: 0.88rem; font-weight: 600; color: var(--text-main);">🌿 대체휴무 (휴무 사용)</span>
+            <input type="color" id="colorPickerSubRest" value="#059669" style="width: 42px; height: 32px; border: none; cursor: pointer; border-radius: 4px; background: none;">
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: var(--bg-subtle); border-radius: 8px;">
+            <span style="font-size: 0.88rem; font-weight: 600; color: var(--text-main);">⚡ 사전차감</span>
+            <input type="color" id="colorPickerPreDeduct" value="#0284c7" style="width: 42px; height: 32px; border: none; cursor: pointer; border-radius: 4px; background: none;">
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: var(--bg-subtle); border-radius: 8px;">
+            <span style="font-size: 0.88rem; font-weight: 600; color: var(--text-main);">🎁 보너스 부여 대상</span>
+            <input type="color" id="colorPickerBonus" value="#7c3aed" style="width: 42px; height: 32px; border: none; cursor: pointer; border-radius: 4px; background: none;">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+        <button type="button" class="btn btn-secondary btn-sm" id="resetColorsBtn">기본값 초기화</button>
+        <div style="display: flex; gap: 0.5rem;">
+          <button type="button" class="btn btn-secondary btn-sm" data-close="colorSettingModal">취소</button>
+          <button type="button" class="btn btn-primary btn-sm" id="saveColorsBtn">✓ 적용 및 저장</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- 토스트 메시지 컨테이너 -->
   <div class="toast-container" id="toastContainer"></div>
 
   <!-- 클라이언트 사이드 고속 엑셀 생성 라이브러리 (SheetJS) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="/js/app.js?v=20260918_v141"></script>
+  <script src="/js/app.js?v=20260918_v142"></script>
 </body>
 </html>

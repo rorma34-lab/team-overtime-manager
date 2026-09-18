@@ -453,7 +453,7 @@ def create_mockup_settlement():
     # 공식 배너 (초록색 예쁜 카드)
     d.rounded_rectangle([180, 30, 980, 100], radius=10, fill="#ecfdf5", outline="#10b981", width=3)
     d.text((200, 42), "★ 컴퓨터가 1초 만에 계산하는 진짜 일한 날(실특근) 공식!", font=get_font(15, bold=True), fill="#065f46")
-    d.text((200, 68), "진짜 일한 날 = 일반휴일에 일한 날 - 대체휴일로 쉰 날 (대체근무와 법정휴일은 알아서 쏙 빼줘요!)", font=get_font(13, bold=True), fill="#047857")
+    d.text((200, 68), "최종 실특근 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무 시 출장기간 내 사전차감)", font=get_font(13, bold=True), fill="#047857")
 
     # 팀별 카드 2개
     d.rounded_rectangle([180, 115, 570, 235], radius=10, fill="#ffffff", outline="#cbd5e1", width=2)
@@ -507,10 +507,10 @@ def create_mockup_settlement():
     d.text((882, 397), "📥 엑셀로 내보내기", font=get_font(11, bold=True), fill="#ffffff", anchor="mm")
 
     # 꿀팁 박스
-    draw_bubble_card(d, (150, 440, 1010, 570), "[실특근 정산 및 자동 계산 원리!]",
-                     "1. 주말(일반휴일)에 일한 날에서 대체휴일로 쉰 날을 쏙 빼면 진짜 일한 날이 돼요!\n"
-                     "2. 김철수 삼촌은 5번 일하고 1번 쉬었으니까: 5 - 1 = 4일 인정!\n"
-                     "3. 사람이 계산기 두드릴 필요 없이 컴퓨터가 실수 없이 1초 만에 척척 계산해줘요!")
+    draw_bubble_card(d, (150, 440, 1010, 570), "[실특근 정산 및 자동 계산 원리 (v1.42)]",
+                     "1. 최종 실특근 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무 시 출장기간 내 사전차감)\n"
+                     "2. 사전차감 잔여수 = 총 사전차감수 - 출장기간 내 사전차감수\n"
+                     "3. 시스템 백엔드, 프론트엔드 통계, 엑셀 정산표 전반에 일관되게 자동 산출됩니다.")
 
     # 지시선
     draw_leader_pin(d, (580, 68), (580, 15), "①", "쉬운 뺄셈 공식", color="#10b981")
@@ -705,14 +705,14 @@ def build_user_presentation(images):
     tf1.word_wrap = True
 
     p1_tag = tf1.paragraphs[0]
-    p1_tag.text = "SMART OVERTIME SYSTEM v1.41  |  일반 사원 전용 간편 매뉴얼"
+    p1_tag.text = "SMART OVERTIME SYSTEM v1.42  |  일반 사원 전용 간편 매뉴얼"
     p1_tag.font.size = Pt(14)
     p1_tag.font.bold = True
     p1_tag.font.color.rgb = RGBColor(253, 186, 116)
     p1_tag.space_after = Pt(14)
 
     p1_title = tf1.add_paragraph()
-    p1_title.text = "스마트 특근 관리 시스템\n사용자 전용 기능 매뉴얼 (v1.41)"
+    p1_title.text = "스마트 특근 관리 시스템\n사용자 전용 기능 매뉴얼 (v1.42)"
     p1_title.font.size = Pt(36)
     p1_title.font.bold = True
     p1_title.font.color.rgb = RGBColor(255, 255, 255)
@@ -725,13 +725,13 @@ def build_user_presentation(images):
     p1_sub.space_after = Pt(28)
 
     p1_auth = tf1.add_paragraph()
-    p1_auth.text = "배포 버전: v1.41 (2026-09-18)  |  PC 모니터 & 스마트폰(모바일) 완벽 지원"
+    p1_auth.text = "배포 버전: v1.42 (2026-09-18)  |  PC 모니터 & 스마트폰(모바일) 완벽 지원"
     p1_auth.font.size = Pt(13)
     p1_auth.font.color.rgb = RGBColor(148, 163, 184)
 
     # --- SLIDE 2: 1단계 - 사번만 넣고 슝 들어가기 ---
     s2_data = [
-        ("① v1.41 버전 뱃지 확인", "화면 오른쪽 위에 파란색 [v1.41] 뱃지가 보이면 최신 버전입니다. 클릭 시 신규 릴리즈 이력이 표시됩니다."),
+        ("① v1.42 버전 뱃지 확인", "화면 오른쪽 위에 파란색 [v1.42] 뱃지가 보이면 최신 버전입니다. 클릭 시 신규 릴리즈 이력이 표시됩니다."),
         ("② 사원번호 간편 입력", "본인의 사원번호를 입력합니다. 복잡한 비밀번호 없이 빠르게 입장 가능합니다."),
         ("③ [입장하기] 버튼 클릭", "등록된 사원은 이름과 소속팀이 자동 조회되어 즉시 메인 대시보드로 이동합니다."),
         ("④ 미등록 사번 즉시 등록", "처음 방문한 사번은 신규 등록창이 나타나며, 성명과 소속팀을 선택하면 즉시 등록되어 입장합니다.")
@@ -893,14 +893,14 @@ def build_admin_presentation(images):
     tf1.word_wrap = True
 
     p1_tag = tf1.paragraphs[0]
-    p1_tag.text = "SMART OVERTIME SYSTEM v1.41  |  관리자 및 운영자 전용 가이드"
+    p1_tag.text = "SMART OVERTIME SYSTEM v1.42  |  관리자 및 운영자 전용 가이드"
     p1_tag.font.size = Pt(14)
     p1_tag.font.bold = True
     p1_tag.font.color.rgb = RGBColor(253, 186, 116)
     p1_tag.space_after = Pt(14)
 
     p1_title = tf1.add_paragraph()
-    p1_title.text = "스마트 특근 관리 시스템\n관리자 모드 운영 매뉴얼 (v1.41)"
+    p1_title.text = "스마트 특근 관리 시스템\n관리자 모드 운영 매뉴얼 (v1.42)"
     p1_title.font.size = Pt(36)
     p1_title.font.bold = True
     p1_title.font.color.rgb = RGBColor(255, 255, 255)
@@ -913,7 +913,7 @@ def build_admin_presentation(images):
     p1_sub.space_after = Pt(28)
 
     p1_auth = tf1.add_paragraph()
-    p1_auth.text = "배포 버전: v1.41 (2026-09-18)  |  총괄 슈퍼관리자 및 부서 팀관리자 전용"
+    p1_auth.text = "배포 버전: v1.42 (2026-09-18)  |  총괄 슈퍼관리자 및 부서 팀관리자 전용"
     p1_auth.font.size = Pt(13)
     p1_auth.font.color.rgb = RGBColor(148, 163, 184)
 
@@ -1055,12 +1055,12 @@ def build_admin_presentation(images):
     ]
     add_visual_slide(prs, "04", "[관리자 모드] 팀원 명부 및 소속팀 관리", "팀원 정보 수정, 팀관리자 권한 토글 및 소속팀 관리를 지원합니다.", s5_data, images["user"])
 
-    # --- SLIDE 6: 실특근 자동 산정 및 정산표 ---
+    # --- SLIDE 6: 실특근 자동 산정 및 정산표 (v1.42 개편) ---
     s6_data = [
-        ("① 명확한 실특근 산정 공식", "★ 실특근 인정일 = 일반휴일 근무일 - 대체휴일 사용일 (대체근무/법정휴일은 산정에서 자동 분리)"),
-        ("② 부서별 실특근 요약 카드", "소속 부서별 총 근무일, 제외 일수, 대체휴일 사용일 및 최종 실특근일을 대형 통계 카드로 제공합니다."),
-        ("③ 개인별 정산 명세 테이블", "사원별 4대 휴일 지표와 최종 실특근 일수를 정렬 가능한 테이블로 한눈에 검토합니다."),
-        ("④ 정산표 엑셀 원클릭 추출", "[📥 정산표 엑셀 내보내기] 버튼으로 월말 보고용 정산 파일을 즉시 다운로드합니다.")
+        ("① 최신 실특근 산정 공식 (v1.42)", "★ 최종 실특근일 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무시 작성한 출장기간 이내의 사전차감)"),
+        ("② 사전차감 잔여수 분리 산출", "★ 사전차감 잔여수 = 총 사전차감수 - (대체휴무 시 설정된 출장기간 내 사전차감 수)"),
+        ("③ 개인별 정산 및 통계 팝업 개편", "사원별 최근 3개월(7/8/9월), 1~4분기, 상/하반기, 연도별 집계와 사전차감 잔여수 독립 제공"),
+        ("④ 정산표 엑셀 원클릭 추출 & 수식 명시", "엑셀 헤더에 산출 수식 및 취합 기간/일시 자동 명기, [📥 정산표 엑셀] 즉시 다운로드")
     ]
     add_visual_slide(prs, "05", "[관리자 모드] 실특근 자동 산정 및 정산표", "대체휴일 사용분을 자동 차감하여 정확한 최종 실특근일을 산출합니다.", s6_data, images["settlement"])
 
@@ -1265,7 +1265,7 @@ def build_admin_presentation(images):
     p_step10.font.color.rgb = COLOR_ACCENT
 
     p_title10 = htf10.add_paragraph()
-    p_title10.text = "자주 묻는 질문(Q&A)과 관리자 운영 꿀팁 총정리 (v1.40)"
+    p_title10.text = "자주 묻는 질문(Q&A)과 관리자 운영 꿀팁 총정리 (v1.42)"
     p_title10.font.size = Pt(22)
     p_title10.font.bold = True
     p_title10.font.color.rgb = COLOR_PRIMARY
@@ -1279,8 +1279,8 @@ def build_admin_presentation(images):
         ("Q1. 팀관리자가 총괄관리자의 특근 일정을 볼 수 있나요?", "아닙니다. 팀관리자는 총괄관리자의 특근 일정을 일체 열람할 수 없도록 철저히 차단 격리되어 있습니다."),
         ("Q2. 팀원 대리 신청 시 비밀 보너스는 사원에게 노출되나요?", "사원 화면 및 API 응답에서는 0으로 마스킹되어 사원은 전혀 모르며, 오직 관리자와 엑셀 원장에만 기재됩니다."),
         ("Q3. 팀관리자와 총괄관리자의 권한 차이는 어떻게 되나요?", "팀관리자는 본인 팀원의 승인/수정만 가능하며, 팀원 소속팀 변경, 슈퍼관리자 승격/하야 지정은 오직 총괄관리자만 가능합니다."),
-        ("Q4. 승인 완료된 특근을 사원이 임의로 수정하거나 삭제할 수 있나요?", "아닙니다. v1.40부터 승인된 특근은 일반 사원의 수정/삭제가 원천 차단되며, 오직 관리자 모드에서 관리자만 수정 또는 삭제할 수 있습니다."),
-        ("Q5. 서버가 재부팅되어도 인원과 특근 데이터가 영구 보존되나요?", "네! Turso 클라우드 영구 DB 연동으로 모든 데이터가 안전 보존되며, v1.40의 안전 스마트 폴백과 스레드 보호로 특근 신청과 데이터 무결성을 완벽하게 보장합니다.")
+        ("Q4. 승인 완료된 특근을 사원이 임의로 수정하거나 삭제할 수 있나요?", "아닙니다. v1.42부터 승인된 특근은 일반 사원의 수정/삭제가 원천 차단되며, 오직 관리자 모드에서 관리자만 수정 또는 삭제할 수 있습니다."),
+        ("Q5. 서버가 재부팅되어도 인원과 특근 데이터가 영구 보존되나요?", "네! Turso 클라우드 영구 DB 연동으로 모든 데이터가 안전 보존되며, v1.42의 안전 스마트 폴백과 스레드 보호로 특근 신청과 데이터 무결성을 완벽하게 보장합니다.")
     ]
 
     for i, (q, a) in enumerate(admin_qa_items):

@@ -56,6 +56,10 @@ class OvertimeConfirmRequest(BaseModel):
     admin_emp_id: str = Field(..., description="확인 처리하는 관리자 사번")
     is_confirmed: int = Field(..., description="1: 확인/승인, 0: 취소/대기")
 
+class OvertimePreDeductRequest(BaseModel):
+    admin_emp_id: str = Field(..., description="사전차감 토글하는 사원 또는 관리자 사번")
+    is_pre_deduct: int = Field(..., description="1: 사전차감 ON, 0: 사전차감 OFF")
+
 class ExportRequest(BaseModel):
     ids: Optional[List[int]] = None
     start_date: Optional[str] = None
