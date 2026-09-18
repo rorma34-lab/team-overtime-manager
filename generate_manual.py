@@ -705,33 +705,33 @@ def build_user_presentation(images):
     tf1.word_wrap = True
 
     p1_tag = tf1.paragraphs[0]
-    p1_tag.text = "SMART OVERTIME SYSTEM v1.40  |  일반 사원 전용 간편 매뉴얼"
+    p1_tag.text = "SMART OVERTIME SYSTEM v1.41  |  일반 사원 전용 간편 매뉴얼"
     p1_tag.font.size = Pt(14)
     p1_tag.font.bold = True
     p1_tag.font.color.rgb = RGBColor(253, 186, 116)
     p1_tag.space_after = Pt(14)
 
     p1_title = tf1.add_paragraph()
-    p1_title.text = "스마트 특근 관리 시스템\n사용자 전용 기능 매뉴얼 (v1.40)"
+    p1_title.text = "스마트 특근 관리 시스템\n사용자 전용 기능 매뉴얼 (v1.41)"
     p1_title.font.size = Pt(36)
     p1_title.font.bold = True
     p1_title.font.color.rgb = RGBColor(255, 255, 255)
     p1_title.space_after = Pt(20)
 
     p1_sub = tf1.add_paragraph()
-    p1_sub.text = "사원번호 간편 입장, 스마트 달력 신청, 승인 특근 보안 격리 및 개인 달력 조회까지 누구나 쉽게 따라 할 수 있는 사용자 공식 가이드입니다."
+    p1_sub.text = "사원번호 간편 입장, 신청 정보 자동완성, 승인 특근 보안 격리 및 개인 달력 조회까지 누구나 쉽게 따라 할 수 있는 사용자 공식 가이드입니다."
     p1_sub.font.size = Pt(15)
     p1_sub.font.color.rgb = RGBColor(203, 213, 225)
     p1_sub.space_after = Pt(28)
 
     p1_auth = tf1.add_paragraph()
-    p1_auth.text = "배포 버전: v1.40 (2026-09-18)  |  PC 모니터 & 스마트폰(모바일) 완벽 지원"
+    p1_auth.text = "배포 버전: v1.41 (2026-09-18)  |  PC 모니터 & 스마트폰(모바일) 완벽 지원"
     p1_auth.font.size = Pt(13)
     p1_auth.font.color.rgb = RGBColor(148, 163, 184)
 
     # --- SLIDE 2: 1단계 - 사번만 넣고 슝 들어가기 ---
     s2_data = [
-        ("① v1.40 버전 뱃지 확인", "화면 오른쪽 위에 파란색 [v1.40] 뱃지가 보이면 최신 버전입니다. 클릭 시 신규 릴리즈 이력이 표시됩니다."),
+        ("① v1.41 버전 뱃지 확인", "화면 오른쪽 위에 파란색 [v1.41] 뱃지가 보이면 최신 버전입니다. 클릭 시 신규 릴리즈 이력이 표시됩니다."),
         ("② 사원번호 간편 입력", "본인의 사원번호를 입력합니다. 복잡한 비밀번호 없이 빠르게 입장 가능합니다."),
         ("③ [입장하기] 버튼 클릭", "등록된 사원은 이름과 소속팀이 자동 조회되어 즉시 메인 대시보드로 이동합니다."),
         ("④ 미등록 사번 즉시 등록", "처음 방문한 사번은 신규 등록창이 나타나며, 성명과 소속팀을 선택하면 즉시 등록되어 입장합니다.")
@@ -893,27 +893,27 @@ def build_admin_presentation(images):
     tf1.word_wrap = True
 
     p1_tag = tf1.paragraphs[0]
-    p1_tag.text = "SMART OVERTIME SYSTEM v1.40  |  관리자 및 운영자 전용 가이드"
+    p1_tag.text = "SMART OVERTIME SYSTEM v1.41  |  관리자 및 운영자 전용 가이드"
     p1_tag.font.size = Pt(14)
     p1_tag.font.bold = True
     p1_tag.font.color.rgb = RGBColor(253, 186, 116)
     p1_tag.space_after = Pt(14)
 
     p1_title = tf1.add_paragraph()
-    p1_title.text = "스마트 특근 관리 시스템\n관리자 모드 운영 매뉴얼 (v1.40)"
+    p1_title.text = "스마트 특근 관리 시스템\n관리자 모드 운영 매뉴얼 (v1.41)"
     p1_title.font.size = Pt(36)
     p1_title.font.bold = True
     p1_title.font.color.rgb = RGBColor(255, 255, 255)
     p1_title.space_after = Pt(20)
 
     p1_sub = tf1.add_paragraph()
-    p1_sub.text = "승인 특근 전용 수정/삭제 제어, 슈퍼관리자 승격/하야 엔진, 캘린더 네비게이션 시인성 상향 및 스마트폰 모바일 완벽 반응형 관리자 공식 가이드입니다."
+    p1_sub.text = "3단계 권한 관리, 원클릭 사전차감 토글, 대체휴무 체계 개편, 신청자 통계 팝업 및 정산표 엑셀까지 완벽 지원하는 관리자 공식 가이드입니다."
     p1_sub.font.size = Pt(15)
     p1_sub.font.color.rgb = RGBColor(203, 213, 225)
     p1_sub.space_after = Pt(28)
 
     p1_auth = tf1.add_paragraph()
-    p1_auth.text = "배포 버전: v1.40 (2026-09-18)  |  총괄 슈퍼관리자 및 부서 팀관리자 전용"
+    p1_auth.text = "배포 버전: v1.41 (2026-09-18)  |  총괄 슈퍼관리자 및 부서 팀관리자 전용"
     p1_auth.font.size = Pt(13)
     p1_auth.font.color.rgb = RGBColor(148, 163, 184)
 

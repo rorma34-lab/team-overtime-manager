@@ -181,6 +181,7 @@ def expand_records_by_holiday_date(records: list) -> list:
 
             cur_sub_date = sub_date if (day_idx == 0 and sub_date != "-") else ("-" if total_days > 1 else sub_date)
             cur_sub_used = sub_used if (day_idx == 0) else 0.0
+            cur_is_pre = int(r.get("is_pre_deduct", 0) or 0) if day_idx == 0 else 0
 
             expanded.append({
                 "holiday_date": date_str,
@@ -191,9 +192,13 @@ def expand_records_by_holiday_date(records: list) -> list:
                 "category": r.get("category", ""),
                 "bonus_granted": r.get("bonus_granted", 0),
                 "bonus_text": "부여(O)" if r.get("bonus_granted", 0) == 1 else "미부여(-)",
-                "holiday_days": 1,           # 요구사항 27-2: 순수 int 1
+                "holiday_days": 1,
                 "sub_holiday_date": cur_sub_date,
-                "sub_holiday_used": cur_sub_used,  # 순수 float
+                "sub_holiday_used": cur_sub_used,
+                "is_pre_deduct": cur_is_pre,
+                "pre_deduct_text": "O" if cur_is_pre else "-",
+                "trip_start_date": r.get("trip_start_date", "") or "-" if day_idx == 0 else "-",
+                "trip_end_date": r.get("trip_end_date", "") or "-" if day_idx == 0 else "-",
                 "project_no": r.get("project_no", "") or "-",
                 "location": r.get("location", "") or "-",
                 "reason": r.get("reason", "") or "-",
@@ -210,7 +215,7 @@ def expand_records_by_holiday_date(records: list) -> list:
 
 
 def aggregate_user_holidays(records: list, user_positions: dict = None) -> list:
-    """개인별 휴일수(대체근무, 법정휴일, 일반휴일, 대체휴가사용, 최종실특근) 집계 (요구사항 27-3)"""
+    """개인별 휴일수(대체근무, 법정휴일, 일반휴일, 대체휴무, 사전차감, 최종실특근) 집계"""
     user_positions = user_positions or {}
     user_map = {}
 
@@ -219,7 +224,11 @@ def aggregate_user_holidays(records: list, user_positions: dict = None) -> list:
         name = r.get("user_name", "")
         team = r.get("team", "")
         cat = r.get("category", "")
+        # 대체휴일 → 대체휴무 표기 정규화
+        if cat == "대체휴일":
+            cat = "대체휴무"
         sub_used = float(r.get("sub_holiday_used", 0.0) or 0.0)
+        is_pre = int(r.get("is_pre_deduct", 0) or 0)
 
         try:
             d1 = datetime.strptime(r["start_date"], "%Y-%m-%d")
@@ -237,6 +246,8 @@ def aggregate_user_holidays(records: list, user_positions: dict = None) -> list:
                 "sub_work_days": 0,
                 "legal_holiday_days": 0,
                 "normal_holiday_days": 0,
+                "sub_holiday_days": 0,   # 대체휴무 일수
+                "pre_deduct_count": 0,   # 사전차감 횟수
                 "total_days": 0,
                 "sub_holiday_used": 0.0,
                 "actual_overtime_days": 0.0,
@@ -252,10 +263,20 @@ def aggregate_user_holidays(records: list, user_positions: dict = None) -> list:
             u["sub_work_days"] += days
         elif cat == "법정휴일":
             u["legal_holiday_days"] += days
+        elif cat == "대체휴무":
+            u["sub_holiday_days"] += days
         else:  # 일반휴일 + 기타
             u["normal_holiday_days"] += days
 
-        u["actual_overtime_days"] = max(0.0, round(u["normal_holiday_days"] - u["sub_holiday_used"], 1))
+        if is_pre:
+            u["pre_deduct_count"] += 1
+
+        # 실특근일 = 일반휴일 - 대체휴무 + 사전차감(대체휴무에 해당하는 횟수)
+        # 단순화: pre_deduct_count만큼 대체휴무를 소진한 것으로 계산
+        deducted = u["sub_holiday_used"]
+        pre_offset = min(u["pre_deduct_count"], int(u["sub_holiday_days"]))
+        u["actual_overtime_days"] = max(0.0, round(u["normal_holiday_days"] - deducted + pre_offset, 1))
+        u["pre_deduct_remaining"] = max(0, u["pre_deduct_count"] - pre_offset)
 
     user_list = list(user_map.values())
     user_list.sort(key=lambda x: (x["team"], x["name"]))
@@ -323,7 +344,8 @@ def generate_overtime_excel(records: list, user_positions: dict = None) -> io.By
 
     headers1 = [
         "순번", "휴일날짜", "요일", "사번", "성명", "소속팀", "특근분류", "보너스 부여",
-        "휴일일수", "대체휴일 사용일", "대체휴가 사용일수",
+        "휴일일수", "대체휴무 사용일", "대체휴가 사용일수", "사전차감",
+        "출장기간(시작)", "출장기간(종료)",
         "프로젝트 번호", "근무 장소", "특근 사유", "확인(승인)", "확인자", "신청일시"
     ]
     fills1 = [None] * len(headers1)
@@ -356,6 +378,9 @@ def generate_overtime_excel(records: list, user_positions: dict = None) -> io.By
             h_val,
             r["sub_holiday_date"],
             sub_v,
+            r.get("pre_deduct_text", "-"),
+            r.get("trip_start_date", "-"),
+            r.get("trip_end_date", "-"),
             r["project_no"],
             r["location"],
             r["reason"],
@@ -364,14 +389,14 @@ def generate_overtime_excel(records: list, user_positions: dict = None) -> io.By
             r["created_at"]
         ]
 
-        center_c = {1, 2, 3, 4, 5, 6, 7, 8, 10, 15, 16, 17}
+        center_c = {1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 13, 14, 18, 19, 20}
         right_c  = {9, 11}
         num_fmt  = {9: "#,##0", 11: "0.0"}
 
         _write_data_row(ws1, r_idx, row_data, s, r_idx % 2 == 0, center_c, right_c, num_fmt)
 
         # 승인 상태 셀 개별 스타일
-        conf_cell = ws1.cell(row=r_idx, column=15)
+        conf_cell = ws1.cell(row=r_idx, column=18)
         conf_cell.fill = s["fill_conf"] if is_conf else s["fill_pend"]
         conf_cell.font = s["conf_font"] if is_conf else s["pend_font"]
 
@@ -383,7 +408,7 @@ def generate_overtime_excel(records: list, user_positions: dict = None) -> io.By
     ws1.cell(row=r_idx, column=10, value="-").alignment = s["align_center"]
     ws1.cell(row=r_idx, column=10).fill = s["fill_total"]
     ws1.cell(row=r_idx, column=10).border = s["border_total"]
-    for c in range(12, 18):
+    for c in range(12, 21):
         ws1.cell(row=r_idx, column=c, value="").fill = s["fill_total"]
         ws1.cell(row=r_idx, column=c).border = s["border_total"]
 
@@ -393,17 +418,18 @@ def generate_overtime_excel(records: list, user_positions: dict = None) -> io.By
     ws2 = wb.create_sheet(title="개인별_휴일합산_정산표")
     _write_title(ws2,
                  "개인별 특근 휴일수 세부 합산 및 최종 실특근일 정산표",
-                 f"산출식: [일반휴일] - [대체휴가 사용일수] = [★최종 실특근일]  (대체근무·법정휴일 제외)  |  출력일시: {now_str}",
-                 12, s)
+                 f"산출식: [일반휴일] - [대체휴가 사용일수] + [사전차감] = [★최종 실특근일]  (대체근무·법정휴일 제외)  |  출력일시: {now_str}",
+                 14, s)
 
     headers2 = [
         "순번", "사원번호", "성명", "소속팀", "직급",
-        "대체근무 (일)", "법정휴일 (일)", "일반휴일 (일)",
-        "총 특근일수 (일)", "대체휴가 사용일수 (일)", "★ 최종 실특근일 (일)", "신청건수"
+        "대체근무 (일)", "법정휴일 (일)", "일반휴일 (일)", "대체휴무 (일)",
+        "총 특근일수 (일)", "대체휴가 사용일수 (일)", "사전차감 (회)", "사전차감 잔여 (회)",
+        "★ 최종 실특근일 (일)", "신청건수"
     ]
     fills2 = [None, None, None, None, None,
-              s["fill_slate"], s["fill_slate"], s["fill_navy"],
-              s["fill_navy"], s["fill_navy"], s["fill_teal"], None]
+              s["fill_slate"], s["fill_slate"], s["fill_navy"], s["fill_navy"],
+              s["fill_navy"], s["fill_navy"], s["fill_teal"], s["fill_teal"], s["fill_teal"], None]
     _write_header_row(ws2, 3, headers2, fills2, s)
     ws2.freeze_panes = "A4"
 
@@ -419,16 +445,19 @@ def generate_overtime_excel(records: list, user_positions: dict = None) -> io.By
             int(u["sub_work_days"]),
             int(u["legal_holiday_days"]),
             int(u["normal_holiday_days"]),
+            int(u.get("sub_holiday_days", 0)),
             int(u["total_days"]),
             float(u["sub_holiday_used"]),
+            int(u.get("pre_deduct_count", 0)),
+            int(u.get("pre_deduct_remaining", 0)),
             float(u["actual_overtime_days"]),
             int(u["records_count"])
         ]
         center_c = {1, 2, 3, 4, 5}
-        right_c  = {6, 7, 8, 9, 10, 11, 12}
-        num_fmt  = {6: "#,##0", 7: "#,##0", 8: "#,##0", 9: "#,##0",
-                    10: "0.0", 11: "0.0", 12: "#,##0"}
-        hl_c = {11}
+        right_c  = {6, 7, 8, 9, 10, 11, 12, 13, 14, 15}
+        num_fmt  = {6: "#,##0", 7: "#,##0", 8: "#,##0", 9: "#,##0", 10: "#,##0",
+                    11: "0.0", 12: "#,##0", 13: "#,##0", 14: "0.0", 15: "#,##0"}
+        hl_c = {14}
 
         _write_data_row(ws2, r2, row_data, s, r2 % 2 == 0, center_c, right_c, num_fmt, hl_c)
         r2 += 1
@@ -436,8 +465,9 @@ def generate_overtime_excel(records: list, user_positions: dict = None) -> io.By
     # 합계 행
     _write_total_row(ws2, r2, f"전체 합계 ({len(user_summaries)}명)", 5,
                      [(6, "#,##0", False), (7, "#,##0", False), (8, "#,##0", False),
-                      (9, "#,##0", False), (10, "0.0", False), (11, "0.0", True),
-                      (12, "#,##0", False)], s)
+                      (9, "#,##0", False), (10, "#,##0", False), (11, "0.0", False),
+                      (12, "#,##0", False), (13, "#,##0", False), (14, "0.0", True),
+                      (15, "#,##0", False)], s)
 
     # ─────────────────────────────────────────────
     # 시트 3: 특근신청_전체원장
@@ -450,7 +480,8 @@ def generate_overtime_excel(records: list, user_positions: dict = None) -> io.By
 
     headers3 = [
         "순번", "사번", "성명", "소속팀", "특근분류", "보너스 부여",
-        "시작일", "종료일", "일수", "대체휴일 사용일", "대체휴일 사용일수",
+        "시작일", "종료일", "일수", "대체휴무 사용일", "대체휴가 사용일수",
+        "사전차감", "출장기간(시작)", "출장기간(종료)",
         "프로젝트 번호", "근무 장소", "특근 사유", "확인(승인)", "확인자", "신청일시"
     ]
     fills3 = [None] * len(headers3)
@@ -470,6 +501,9 @@ def generate_overtime_excel(records: list, user_positions: dict = None) -> io.By
         sub_date = r.get("sub_holiday_date", "") or "-"
         sub_used = float(r.get("sub_holiday_used", 0.0) or 0.0)
         bonus_val = "부여(O)" if r.get("bonus_granted", 0) == 1 else "미부여(-)"
+        pre_deduct_val = "O" if int(r.get("is_pre_deduct", 0) or 0) else "-"
+        trip_s = r.get("trip_start_date", "") or "-"
+        trip_e = r.get("trip_end_date", "") or "-"
 
         row_data = [
             idx,
@@ -480,9 +514,12 @@ def generate_overtime_excel(records: list, user_positions: dict = None) -> io.By
             bonus_val,
             r.get("start_date", ""),
             r.get("end_date", "") or r.get("start_date", ""),
-            int(days_count),   # 순수 정수
+            int(days_count),
             sub_date,
-            sub_used,          # 순수 float
+            sub_used,
+            pre_deduct_val,
+            trip_s,
+            trip_e,
             r.get("project_no", "") or "-",
             r.get("location", "") or "-",
             r.get("reason", "") or "-",
@@ -490,13 +527,13 @@ def generate_overtime_excel(records: list, user_positions: dict = None) -> io.By
             r.get("confirmed_by", "") or "-",
             r.get("created_at", "")
         ]
-        center_c = {1, 2, 3, 4, 5, 6, 7, 8, 10, 15, 16, 17}
+        center_c = {1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 13, 14, 18, 19, 20}
         right_c  = {9, 11}
         num_fmt  = {9: "#,##0", 11: "0.0"}
 
         _write_data_row(ws3, r3, row_data, s, r3 % 2 == 0, center_c, right_c, num_fmt)
 
-        conf_cell = ws3.cell(row=r3, column=15)
+        conf_cell = ws3.cell(row=r3, column=18)
         conf_cell.fill = s["fill_conf"] if is_conf else s["fill_pend"]
         conf_cell.font = s["conf_font"] if is_conf else s["pend_font"]
 
@@ -507,7 +544,7 @@ def generate_overtime_excel(records: list, user_positions: dict = None) -> io.By
     ws3.cell(row=r3, column=10, value="-").alignment = s["align_center"]
     ws3.cell(row=r3, column=10).fill = s["fill_total"]
     ws3.cell(row=r3, column=10).border = s["border_total"]
-    for c in range(12, 18):
+    for c in range(12, 21):
         ws3.cell(row=r3, column=c, value="").fill = s["fill_total"]
         ws3.cell(row=r3, column=c).border = s["border_total"]
 
@@ -611,17 +648,20 @@ def generate_settlement_excel(
 
     _write_title(ws1,
                  "★ 개인별 최종 실특근일 정산표",
-                 f"{period_str}  |  산출식: [일반휴일] - [대체휴가 사용일수] = [★최종 실특근일]  |  출력일시: {now_str}",
-                 11, s)
+                 f"{period_str}  |  산출식: [일반휴일] - [대체휴가 사용일수] + [사전차감] = [★최종 실특근일]  |  출력일시: {now_str}",
+                 13, s)
 
     headers1 = [
         "순번", "사원번호", "성명", "소속팀",
-        "대체근무 (일)", "법정휴일 (일)", "일반휴일 (일)",
-        "총 특근일수 (일)", "대체휴가 사용일수 (일)", "★ 최종 실특근일 (일)", "신청건수"
+        "대체근무 (일)", "법정휴일 (일)", "일반휴일 (일)", "대체휴무 (일)",
+        "총 특근일수 (일)", "대체휴가 사용일수 (일)",
+        "사전차감 (회)", "사전차감 잔여 (회)",
+        "★ 최종 실특근일 (일)", "신청건수"
     ]
     fills1 = [None, None, None, None,
-              s["fill_slate"], s["fill_slate"], s["fill_navy"],
-              s["fill_navy"], s["fill_navy"], s["fill_teal"], None]
+              s["fill_slate"], s["fill_slate"], s["fill_navy"], s["fill_navy"],
+              s["fill_navy"], s["fill_navy"], s["fill_teal"], s["fill_teal"],
+              s["fill_teal"], None]
     _write_header_row(ws1, 3, headers1, fills1, s)
     ws1.freeze_panes = "A4"
 
@@ -635,16 +675,19 @@ def generate_settlement_excel(
             int(u.get("excluded_sub_days", 0) or 0),
             int(u.get("excluded_legal_days", 0) or 0),
             int(u.get("overtime_days", 0) or 0),
+            int(u.get("sub_holiday_days", 0) or 0),
             int(u.get("total_days", 0) or 0),
             float(u.get("sub_holiday_used", 0.0) or 0.0),
+            int(u.get("pre_deduct_count", 0) or 0),
+            int(u.get("pre_deduct_remaining", 0) or 0),
             float(u.get("actual_overtime_days", 0.0) or 0.0),
             int(u.get("records_count", 1) or 1)
         ]
         center_c = {1, 2, 3, 4}
-        right_c  = {5, 6, 7, 8, 9, 10, 11}
-        num_fmt  = {5: "#,##0", 6: "#,##0", 7: "#,##0", 8: "#,##0",
-                    9: "0.0", 10: "0.0", 11: "#,##0"}
-        hl_c = {10}
+        right_c  = {5, 6, 7, 8, 9, 10, 11, 12, 13, 14}
+        num_fmt  = {5: "#,##0", 6: "#,##0", 7: "#,##0", 8: "#,##0", 9: "#,##0",
+                    10: "0.0", 11: "#,##0", 12: "#,##0", 13: "0.0", 14: "#,##0"}
+        hl_c = {13}
 
         _write_data_row(ws1, r1, row_data, s, r1 % 2 == 0, center_c, right_c, num_fmt, hl_c)
         r1 += 1
@@ -652,8 +695,9 @@ def generate_settlement_excel(
     # 합계 행
     _write_total_row(ws1, r1, f"전체 합계 ({len(users)}명)", 4,
                      [(5, "#,##0", False), (6, "#,##0", False), (7, "#,##0", False),
-                      (8, "#,##0", False), (9, "0.0", False), (10, "0.0", True),
-                      (11, "#,##0", False)], s)
+                      (8, "#,##0", False), (9, "#,##0", False), (10, "0.0", False),
+                      (11, "#,##0", False), (12, "#,##0", False), (13, "0.0", True),
+                      (14, "#,##0", False)], s)
 
     # ─────────────────────────────────────────────
     # 시트 2: 부서별_정산_요약표

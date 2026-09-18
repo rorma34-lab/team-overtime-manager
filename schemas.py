@@ -21,15 +21,18 @@ class UserUpdateRequest(BaseModel):
 
 class OvertimeCreateRequest(BaseModel):
     emp_id: str = Field(..., description="신청자 사원번호")
-    category: str = Field(..., description="특근 분류: 대체근무 / 일반휴일 / 법정휴일")
+    category: str = Field(..., description="특근 분류: 대체근무 / 일반휴일 / 법정휴일 / 대체휴무")
     start_date: str = Field(..., description="시작일 (YYYY-MM-DD)")
     end_date: str = Field(..., description="종료일 (YYYY-MM-DD)")
     project_no: Optional[str] = Field("", description="프로젝트 번호")
     location: Optional[str] = Field("", description="장소")
     reason: Optional[str] = Field("", description="특근 사유")
-    sub_holiday_used: Optional[float] = Field(0.0, description="대체휴일 사용일수")
-    sub_holiday_date: Optional[str] = Field("", description="대체휴일 사용일자 (YYYY-MM-DD)")
+    sub_holiday_used: Optional[float] = Field(0.0, description="대체휴무 사용일수")
+    sub_holiday_date: Optional[str] = Field("", description="대체휴무 사용일자 (YYYY-MM-DD)")
     bonus_granted: Optional[int] = Field(0, description="보너스 부여 여부 (1: 부여, 0: 미부여)")
+    is_pre_deduct: Optional[int] = Field(0, description="사전차감 여부 (1: 사전차감, 0: 일반)")
+    trip_start_date: Optional[str] = Field("", description="대체휴무 출장기간 시작일 (YYYY-MM-DD)")
+    trip_end_date: Optional[str] = Field("", description="대체휴무 출장기간 종료일 (YYYY-MM-DD)")
 
 class OvertimeUpdateRequest(BaseModel):
     changed_by: str = Field(..., description="수정 작업을 수행하는 사원번호")
@@ -42,6 +45,9 @@ class OvertimeUpdateRequest(BaseModel):
     sub_holiday_used: Optional[float] = 0.0
     sub_holiday_date: Optional[str] = ""
     bonus_granted: Optional[int] = None
+    is_pre_deduct: Optional[int] = None
+    trip_start_date: Optional[str] = ""
+    trip_end_date: Optional[str] = ""
 
 class OvertimeDeleteRequest(BaseModel):
     changed_by: str = Field(..., description="삭제 작업을 수행하는 사원번호")

@@ -1131,9 +1131,11 @@ function renderUserMyStats(list) {
     const subUsed = Number(item.sub_holiday_used || 0);
     const isConf = item.is_confirmed === 1;
 
-    // 일반휴일만 실특근 계산 대상 (일반휴일 - 대체휴일 사용)
+    // 실특근 계산 (일반휴일 - 대체휴무 + 사전차감)
     const otDays = (item.category === '일반휴일') ? days : 0;
-    const actDays = Math.max(0, otDays - subUsed);
+    const subDays = (item.category === '대체휴무' || item.category === '대체휴일') ? days : subUsed;
+    const preDays = (item.is_pre_deduct === 1) ? days : 0;
+    const actDays = Math.max(0, otDays - subDays + preDays);
 
     // 1. 연간
     if (itemYear === curYear) {
@@ -1284,6 +1286,42 @@ function renderUserCalendar(year, month) {
 }
 
 // ===== 6. 수정/삭제/이력 모달 =====
+function setEditPreDeduct(active) {
+  const btn = document.getElementById('editPreDeductToggleBtn');
+  const input = document.getElementById('editIsPreDeduct');
+  if (!btn || !input) return;
+  input.value = active ? '1' : '0';
+  if (active) {
+    btn.textContent = 'ON';
+    btn.className = 'btn btn-sm btn-primary';
+    btn.style.background = 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)';
+    btn.style.color = '#fff';
+  } else {
+    btn.textContent = 'OFF';
+    btn.className = 'btn btn-sm btn-secondary';
+    btn.style.background = '';
+    btn.style.color = '';
+  }
+}
+
+const editPreDeductToggleBtn = document.getElementById('editPreDeductToggleBtn');
+if (editPreDeductToggleBtn) {
+  editPreDeductToggleBtn.addEventListener('click', () => {
+    const currentVal = document.getElementById('editIsPreDeduct')?.value === '1';
+    setEditPreDeduct(!currentVal);
+  });
+}
+
+const editCategoryEl = document.getElementById('editCategory');
+if (editCategoryEl) {
+  editCategoryEl.addEventListener('change', () => {
+    const tripRow = document.getElementById('editTripDatesRow');
+    if (tripRow) {
+      tripRow.style.display = editCategoryEl.value === '대체휴무' ? 'grid' : 'none';
+    }
+  });
+}
+
 async function openEditModal(itemId) {
   try {
     const res = await fetch(`/api/overtimes/${itemId}`);
@@ -1305,15 +1343,24 @@ async function openEditModal(itemId) {
     document.getElementById('editProjectNo').value = item.project_no || '';
     document.getElementById('editLocation').value = item.location || '';
     document.getElementById('editReason').value = item.reason || '';
-    document.getElementById('editSubHolidayDate').value = item.sub_holiday_date || '';
-    document.getElementById('editSubHolidayUsed').value = (item.sub_holiday_used !== undefined && item.sub_holiday_used !== null) ? item.sub_holiday_used : '0';
-    
-    // 요구사항 19: 대체휴일은 관리자가 판단하므로 관리자 모드에서만 노출
-    const subRow = document.getElementById('editSubHolidayRow');
-    if (subRow) {
-      const isAdmin = currentMode === 'admin' || (currentUser && (currentUser.is_admin || currentUser.is_super));
-      subRow.style.display = isAdmin ? 'grid' : 'none';
+
+    // 대체휴무 출장기간 표시 제어
+    const tripRow = document.getElementById('editTripDatesRow');
+    if (tripRow) {
+      tripRow.style.display = item.category === '대체휴무' ? 'grid' : 'none';
     }
+    const tripStartEl = document.getElementById('editTripStartDate');
+    const tripEndEl = document.getElementById('editTripEndDate');
+    if (tripStartEl) tripStartEl.value = item.trip_start_date || '';
+    if (tripEndEl) tripEndEl.value = item.trip_end_date || '';
+
+    // 관리자 전용: 사전차감 토글형 버튼 제어
+    const preRow = document.getElementById('editPreDeductRow');
+    if (preRow) {
+      const isAdmin = currentMode === 'admin' || (currentUser && (currentUser.is_admin || currentUser.is_super));
+      preRow.style.display = isAdmin ? 'flex' : 'none';
+    }
+    setEditPreDeduct(item.is_pre_deduct === 1);
 
     openModal('editModal');
   } catch (err) {
@@ -1332,10 +1379,9 @@ document.getElementById('editOvertimeForm').addEventListener('submit', async (e)
   const location = document.getElementById('editLocation').value.trim();
   const reason = document.getElementById('editReason').value.trim();
 
-  const subHolidayRow = document.getElementById('editSubHolidayRow');
-  const isAdminVisible = subHolidayRow && subHolidayRow.style.display !== 'none';
-  const subHolidayDate = isAdminVisible ? (document.getElementById('editSubHolidayDate').value || '').trim() : undefined;
-  const subHolidayUsed = isAdminVisible ? parseFloat(document.getElementById('editSubHolidayUsed').value || 0) : undefined;
+  const tripStartDate = (document.getElementById('editTripStartDate')?.value || '').trim();
+  const tripEndDate = (document.getElementById('editTripEndDate')?.value || '').trim();
+  const isPreDeduct = document.getElementById('editIsPreDeduct')?.value === '1' ? 1 : 0;
 
   if (startDate > endDate) {
     showToast('종료일은 시작일보다 빠를 수 없습니다.', 'error');
@@ -1349,10 +1395,11 @@ document.getElementById('editOvertimeForm').addEventListener('submit', async (e)
     end_date: endDate,
     project_no: projectNo,
     location,
-    reason
+    reason,
+    is_pre_deduct: isPreDeduct,
+    trip_start_date: tripStartDate,
+    trip_end_date: tripEndDate
   };
-  if (subHolidayDate !== undefined) payload.sub_holiday_date = subHolidayDate;
-  if (subHolidayUsed !== undefined) payload.sub_holiday_used = subHolidayUsed;
 
   const editSubmitBtn = document.getElementById('editOvertimeForm').querySelector('button[type="submit"]');
   const restoreEditBtn = setButtonLoading(editSubmitBtn, '수정 저장 중...');
@@ -1369,7 +1416,7 @@ document.getElementById('editOvertimeForm').addEventListener('submit', async (e)
       return;
     }
     closeModal('editModal');
-    showToast('특근 내역이 수정되었습니다.');
+    showToast('특근/휴무 내역이 수정되었습니다.');
     if (currentMode === 'user') loadUserOvertimes();
     else loadAdminData();
   } catch (err) {
@@ -1893,9 +1940,17 @@ function showDailyWorkers(dateStr, list) {
     const isConf = item.is_confirmed === 1;
 
     tr.innerHTML = `
-      <td><b>${item.user_name}</b> <span style="font-size:0.76rem; color:var(--text-light);">(${item.emp_id})</span></td>
+      <td>
+        <a href="javascript:void(0)" onclick="showUserStatsPopup('${item.emp_id}', '${escapeHtml(item.user_name)}')" style="color:var(--primary); font-weight:700; text-decoration:underline; cursor:pointer;" title="클릭 시 ${escapeHtml(item.user_name)} 님의 상세 통계 팝업 열기">
+          ${escapeHtml(item.user_name)}
+        </a>
+        <span style="font-size:0.76rem; color:var(--text-light);">(${item.emp_id})</span>
+      </td>
       <td>${item.team}</td>
-      <td><span class="cat-badge ${item.category}">${item.category}</span></td>
+      <td>
+        <span class="cat-badge ${item.category}">${item.category}</span>
+        ${item.is_pre_deduct === 1 ? `<span class="badge" style="background:#0284c7; color:#fff; font-size:0.72rem; padding:1px 5px; border-radius:4px; font-weight:700; margin-left:3px;">⚡사전차감</span>` : ''}
+      </td>
       <td>${item.start_date} ~ ${item.end_date}</td>
       <td>${item.project_no || '-'}</td>
       <td>${item.location || '-'}</td>
@@ -2007,12 +2062,20 @@ function renderAdminOvertimeTable() {
       <td style="text-align: center;">
         <input type="checkbox" class="row-checkbox" data-id="${item.id}">
       </td>
-      <td><b>${item.user_name}</b> <span style="font-size:0.78rem; color:var(--text-light);">(${item.emp_id})</span></td>
+      <td>
+        <a href="javascript:void(0)" onclick="showUserStatsPopup('${item.emp_id}', '${escapeHtml(item.user_name)}')" style="color:var(--primary); font-weight:700; text-decoration:underline; cursor:pointer;" title="클릭 시 ${escapeHtml(item.user_name)} 님의 상세 통계 팝업 열기">
+          ${escapeHtml(item.user_name)}
+        </a>
+        <span style="font-size:0.78rem; color:var(--text-light);">(${item.emp_id})</span>
+      </td>
       <td>${item.team}</td>
       <td><span class="cat-badge ${item.category}">${item.category}</span></td>
       <td>${item.start_date} ~ ${item.end_date}</td>
       <td>
-        ${item.sub_holiday_date ? `<span style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; font-weight:700; padding:2px 8px; border-radius:6px; font-size:0.78rem; display:inline-block; white-space:nowrap;">🏖️ ${escapeHtml(item.sub_holiday_date)} (${item.sub_holiday_used}일)</span>` : `<span style="color:#94a3b8; font-size:0.8rem;">-</span>`}
+        ${item.is_pre_deduct === 1 ? `<span class="badge" style="background:#0284c7; color:#fff; font-size:0.75rem; padding:2px 6px; border-radius:4px; font-weight:700; margin-right:4px;">⚡ 사전차감</span>` : ''}
+        ${item.category === '대체휴무' && item.trip_start_date ? `<span style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; font-weight:700; padding:2px 6px; border-radius:4px; font-size:0.75rem; display:inline-block; white-space:nowrap;">✈️ ${escapeHtml(item.trip_start_date)}~${escapeHtml(item.trip_end_date)}</span>` : ''}
+        ${!item.is_pre_deduct && !(item.category === '대체휴무' && item.trip_start_date) && !item.sub_holiday_date ? `<span style="color:#94a3b8; font-size:0.8rem;">-</span>` : ''}
+        ${item.sub_holiday_date ? `<span style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; font-weight:700; padding:2px 8px; border-radius:6px; font-size:0.75rem; display:inline-block; white-space:nowrap;">🏖️ ${escapeHtml(item.sub_holiday_date)} (${item.sub_holiday_used}일)</span>` : ''}
       </td>
       <td>${item.project_no || '-'}</td>
       <td>${item.location || '-'}</td>
@@ -2201,7 +2264,43 @@ function debounce(func, wait) {
   };
 }
 
-// 요구사항 4: 관리자 팀원 특근 대리 신청 모달 및 등록 로직
+// 요구사항 5: 관리자 팀원 특근/대체휴무 대리 신청
+function setProxyPreDeduct(active) {
+  const btn = document.getElementById('proxyPreDeductToggleBtn');
+  const chk = document.getElementById('proxyIsPreDeduct');
+  if (!btn || !chk) return;
+  chk.checked = !!active;
+  if (active) {
+    btn.textContent = 'ON';
+    btn.className = 'btn btn-sm btn-primary';
+    btn.style.background = 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)';
+    btn.style.color = '#fff';
+  } else {
+    btn.textContent = 'OFF';
+    btn.className = 'btn btn-sm btn-secondary';
+    btn.style.background = '';
+    btn.style.color = '';
+  }
+}
+
+const proxyPreDeductToggleBtn = document.getElementById('proxyPreDeductToggleBtn');
+if (proxyPreDeductToggleBtn) {
+  proxyPreDeductToggleBtn.addEventListener('click', () => {
+    const chk = document.getElementById('proxyIsPreDeduct');
+    setProxyPreDeduct(!chk?.checked);
+  });
+}
+
+const proxyCategoryEl = document.getElementById('proxyCategory');
+if (proxyCategoryEl) {
+  proxyCategoryEl.addEventListener('change', () => {
+    const tripRow = document.getElementById('proxyTripDatesRow');
+    if (tripRow) {
+      tripRow.style.display = proxyCategoryEl.value === '대체휴무' ? 'grid' : 'none';
+    }
+  });
+}
+
 const adminProxyOvertimeBtn = document.getElementById('adminProxyOvertimeBtn');
 if (adminProxyOvertimeBtn) {
   adminProxyOvertimeBtn.addEventListener('click', async () => {
@@ -2251,6 +2350,14 @@ if (adminProxyOvertimeBtn) {
     const proxyCategory = document.getElementById('proxyCategory');
     if (proxyCategory) proxyCategory.value = '일반휴일';
 
+    const tripRow = document.getElementById('proxyTripDatesRow');
+    if (tripRow) tripRow.style.display = 'none';
+    const pTripStart = document.getElementById('proxyTripStartDate');
+    const pTripEnd = document.getElementById('proxyTripEndDate');
+    if (pTripStart) pTripStart.value = '';
+    if (pTripEnd) pTripEnd.value = '';
+    setProxyPreDeduct(false);
+
     const pNo = document.getElementById('proxyProjectNo');
     const pLoc = document.getElementById('proxyLocation');
     const pReason = document.getElementById('proxyReason');
@@ -2277,13 +2384,16 @@ if (adminProxyOvertimeForm) {
     const location = (document.getElementById('proxyLocation').value || '').trim();
     const reason = (document.getElementById('proxyReason').value || '').trim();
     const bonusGranted = document.getElementById('proxyBonusGranted').checked ? 1 : 0;
+    const isPreDeduct = document.getElementById('proxyIsPreDeduct')?.checked ? 1 : 0;
+    const tripStartDate = (document.getElementById('proxyTripStartDate')?.value || '').trim();
+    const tripEndDate = (document.getElementById('proxyTripEndDate')?.value || '').trim();
 
     if (!empId) {
       showToast('신청 대상 팀원을 선택해주세요.', 'error');
       return;
     }
     if (!startDate || !endDate) {
-      showToast('특근 시작일과 종료일을 입력해주세요.', 'error');
+      showToast('특근/휴무 시작일과 종료일을 입력해주세요.', 'error');
       return;
     }
     if (startDate > endDate) {
@@ -2303,18 +2413,19 @@ if (adminProxyOvertimeForm) {
           project_no: projectNo,
           location,
           reason,
-          sub_holiday_date: '',
-          sub_holiday_used: 0.0,
-          bonus_granted: bonusGranted
+          bonus_granted: bonusGranted,
+          is_pre_deduct: isPreDeduct,
+          trip_start_date: tripStartDate,
+          trip_end_date: tripEndDate
         })
       });
       const data = await res.json();
       if (!res.ok) {
-        showToast(data.detail || '특근 대리 등록에 실패했습니다.', 'error');
+        showToast(data.detail || '특근/휴무 등록에 실패했습니다.', 'error');
         return;
       }
 
-      showToast(`팀원의 특근이 성공적으로 대리 등록되었습니다! ${bonusGranted === 1 ? '(🎁 보너스 포함)' : ''}`);
+      showToast(`팀원의 특근/대체휴무가 성공적으로 등록되었습니다! ${bonusGranted === 1 ? '(🎁 보너스 포함)' : ''}`);
       closeModal('adminProxyOvertimeModal');
       await loadAdminData();
     } catch (err) {
@@ -2467,6 +2578,8 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
             sub_work_days: 0,
             legal_holiday_days: 0,
             normal_holiday_days: 0,
+            sub_holiday_days: 0,
+            pre_deduct_count: 0,
             total_days: 0,
             sub_holiday_used: 0,
             records_count: 0
@@ -2479,23 +2592,30 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
 
         if (item.category === '대체근무') u.sub_work_days += days;
         else if (item.category === '법정휴일') u.legal_holiday_days += days;
-        else u.normal_holiday_days += days;
+        else if (item.category === '일반휴일') u.normal_holiday_days += days;
+        else if (item.category === '대체휴무' || item.category === '대체휴일') u.sub_holiday_days += days;
+
+        if (item.is_pre_deduct === 1) u.pre_deduct_count += 1;
       });
 
       const userList = Object.values(userMap).sort((a, b) => a.team.localeCompare(b.team) || a.name.localeCompare(b.name));
       const sheet2Rows = userList.map((u, idx) => {
-        const actualOvertime = Math.max(0, Math.round((u.normal_holiday_days - u.sub_holiday_used) * 10) / 10);
+        const totalSub = u.sub_holiday_used + u.sub_holiday_days;
+        const actualOvertime = Math.max(0, Math.round((u.normal_holiday_days - totalSub + u.pre_deduct_count) * 10) / 10);
+        const preRemain = Math.max(0, u.pre_deduct_count - totalSub);
         return {
           "순번": idx + 1,
           "사원번호": u.emp_id,
           "성명": u.name,
           "소속팀": u.team,
-          "대체근무 일수": u.sub_work_days,        // 순수 숫자
-          "법정휴일 일수": u.legal_holiday_days,    // 순수 숫자
-          "일반휴일 일수": u.normal_holiday_days,   // 순수 숫자
-          "총 특근일수": u.total_days,             // 순수 숫자
-          "대체휴가 사용일수": u.sub_holiday_used,  // 순수 숫자
-          "★ 최종 실특근일": actualOvertime,       // 순수 숫자
+          "대체근무 일수": u.sub_work_days,
+          "법정휴일 일수": u.legal_holiday_days,
+          "일반휴일 일수": u.normal_holiday_days,
+          "대체휴무 일수": totalSub,
+          "사전차감 횟수": u.pre_deduct_count,
+          "사전차감 잔여": preRemain,
+          "총 특근일수": u.total_days,
+          "★ 최종 실특근일": actualOvertime,
           "신청건수": u.records_count
         };
       });
@@ -2510,14 +2630,16 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
           "대체근무 일수": sheet2Rows.reduce((a, b) => a + (b["대체근무 일수"] || 0), 0),
           "법정휴일 일수": sheet2Rows.reduce((a, b) => a + (b["법정휴일 일수"] || 0), 0),
           "일반휴일 일수": sheet2Rows.reduce((a, b) => a + (b["일반휴일 일수"] || 0), 0),
+          "대체휴무 일수": Math.round(sheet2Rows.reduce((a, b) => a + (b["대체휴무 일수"] || 0), 0) * 10) / 10,
+          "사전차감 횟수": sheet2Rows.reduce((a, b) => a + (b["사전차감 횟수"] || 0), 0),
+          "사전차감 잔여": sheet2Rows.reduce((a, b) => a + (b["사전차감 잔여"] || 0), 0),
           "총 특근일수": sheet2Rows.reduce((a, b) => a + (b["총 특근일수"] || 0), 0),
-          "대체휴가 사용일수": Math.round(sheet2Rows.reduce((a, b) => a + (b["대체휴가 사용일수"] || 0), 0) * 10) / 10,
           "★ 최종 실특근일": Math.round(sheet2Rows.reduce((a, b) => a + (b["★ 최종 실특근일"] || 0), 0) * 10) / 10,
           "신청건수": sheet2Rows.reduce((a, b) => a + (b["신청건수"] || 0), 0)
         });
       }
 
-      // 3. 특근신청 전체원장 시트 (요구사항 27-2)
+      // 3. 특근신청 전체원장 시트
       const sheet3Rows = targetList.map((item, idx) => {
         let days = 1;
         try {
@@ -2534,9 +2656,12 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
           "특근분류": item.category,
           "시작일": item.start_date,
           "종료일": item.end_date || item.start_date,
-          "일수": days, // 요구사항 27-2: 순수 숫자 (절대 '4일'이 아님)
-          "대체휴일 사용일": item.sub_holiday_date || '-',
-          "대체휴일 사용일수": Number(item.sub_holiday_used || 0),
+          "일수": days,
+          "대체휴무 사용일": item.sub_holiday_date || '-',
+          "대체휴무 사용일수": Number(item.sub_holiday_used || 0),
+          "사전차감": item.is_pre_deduct === 1 ? 'O' : '-',
+          "출장시작일": item.trip_start_date || '-',
+          "출장종료일": item.trip_end_date || '-',
           "프로젝트 번호": item.project_no || '-',
           "근무 장소": item.location || '-',
           "특근 사유": item.reason || '-',
@@ -2632,19 +2757,27 @@ function renderAdminUserRows() {
     const canToggle = isCurrentUserSuper && !isSuperUser;
     const toggleTitle = !isCurrentUserSuper ? '관리자 지정 권한은 총괄관리자만 가능합니다' : (isSuperUser ? '총괄관리자 권한은 고정입니다' : '관리자 권한 토글');
 
-    let roleBadgeHtml = '<span class="badge" style="background:#e2e8f0; color:#475569; font-size:0.72rem;">👤 팀원</span>';
-    if (isSuperUser) {
-      roleBadgeHtml = '<span class="badge" style="background:#fbbf24; color:#78350f; font-weight:700; font-size:0.72rem;">👑 총괄 슈퍼관리자</span>';
-    } else if (isAdmin) {
-      roleBadgeHtml = '<span class="badge" style="background:#0284c7; color:#fff; font-weight:700; font-size:0.72rem;">🛡️ 팀관리자</span>';
-    }
+    // v1.41: 3단계 권한 선택 UI
+    const canEditRole = isCurrentUserSuper && u.emp_id.toLowerCase() !== 'ps37082' && u.emp_id !== currentUser.emp_id;
+    let roleLevel = 0; // 0=팀원, 1=팀관리자, 2=슈퍼관리자
+    if (u.is_super === 1) roleLevel = 2;
+    else if (u.is_admin === 1) roleLevel = 1;
 
-    let superBtnHtml = '';
-    if (isCurrentUserSuper && u.emp_id.toLowerCase() !== 'ps37082' && u.emp_id !== currentUser.emp_id) {
-      if (u.is_super === 1) {
-        superBtnHtml = `<button type="button" class="btn btn-warning btn-sm demote-super-btn" data-empid="${u.emp_id}" data-name="${escapeHtml(u.name)}" style="padding: 3px 8px; font-size: 0.74rem; font-weight: 700;" title="슈퍼관리자에서 팀관리자로 하야">⬇️ 하야</button>`;
+    let roleSelectHtml = '';
+    if (canEditRole) {
+      roleSelectHtml = `
+        <select class="role-level-select" data-empid="${u.emp_id}" data-name="${escapeHtml(u.name)}" style="font-size:0.8rem; padding:3px 6px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-input); color:var(--text-main); cursor:pointer;">
+          <option value="0" ${roleLevel===0?'selected':''}>👤 팀원</option>
+          <option value="1" ${roleLevel===1?'selected':''}>🛡️ 팀관리자</option>
+          <option value="2" ${roleLevel===2?'selected':''}>👑 슈퍼관리자</option>
+        </select>`;
+    } else {
+      if (roleLevel === 2) {
+        roleSelectHtml = '<span class="badge" style="background:#fbbf24; color:#78350f; font-weight:700; font-size:0.72rem;">👑 슈퍼관리자</span>';
+      } else if (roleLevel === 1) {
+        roleSelectHtml = '<span class="badge" style="background:#0284c7; color:#fff; font-weight:700; font-size:0.72rem;">🛡️ 팀관리자</span>';
       } else {
-        superBtnHtml = `<button type="button" class="btn btn-sm promote-super-btn" data-empid="${u.emp_id}" data-name="${escapeHtml(u.name)}" style="padding: 3px 8px; font-size: 0.74rem; font-weight: 700; background: #fef3c7; color: #b45309; border: 1px solid #fde68a;" title="총괄 슈퍼관리자로 승격">👑 슈퍼관리자 승격</button>`;
+        roleSelectHtml = '<span class="badge" style="background:#e2e8f0; color:#475569; font-size:0.72rem;">👤 팀원</span>';
       }
     }
 
@@ -2654,17 +2787,11 @@ function renderAdminUserRows() {
       <td>${escapeHtml(u.team)}</td>
       <td>${escapeHtml(u.position || '팀원')}</td>
       <td>
-        <div style="display: flex; align-items: center; gap: 6px;">
-          ${roleBadgeHtml}
-          <label class="toggle-switch" style="transform: scale(0.85);">
-            <input type="checkbox" class="user-admin-toggle" data-empid="${u.emp_id}" ${isAdmin ? 'checked' : ''} ${canToggle ? '' : 'disabled'} title="${toggleTitle}">
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
+        ${roleSelectHtml}
       </td>
       <td>
         <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
-          ${superBtnHtml}
+          <button type="button" class="btn btn-secondary btn-sm" onclick="showUserStatsPopup('${u.emp_id}', '${escapeHtml(u.name)}')" style="padding: 3px 8px; font-size: 0.78rem;">📊 통계</button>
           <button type="button" class="btn btn-secondary btn-sm edit-user-btn" onclick="openUserEditModal('${u.emp_id}')" data-empid="${u.emp_id}" style="padding: 3px 8px; font-size: 0.78rem;">✏️ 수정</button>
           <button type="button" class="btn btn-danger btn-sm delete-user-btn" onclick="handleDeleteUser('${u.emp_id}', '${escapeHtml(u.name)}')" data-empid="${u.emp_id}" data-name="${escapeHtml(u.name)}" ${isSuperUser ? 'disabled title="총괄관리자는 삭제할 수 없습니다"' : ''} style="padding: 3px 8px; font-size: 0.78rem;">삭제</button>
         </div>
@@ -2673,49 +2800,40 @@ function renderAdminUserRows() {
     tbody.appendChild(tr);
   });
 
-  // 슈퍼관리자 승격 이벤트 바인딩
-  tbody.querySelectorAll('.promote-super-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const empId = btn.getAttribute('data-empid');
-      const name = btn.getAttribute('data-name');
-      if (!confirm(`'${name}'(${empId}) 님을 총괄 슈퍼관리자로 승격하시겠습니까?\n\n슈퍼관리자는 전체 부서 특근 승인, 인원 관리 및 시스템 총괄 제어가 가능합니다.`)) return;
-      await updateUserSuperRole(empId, 1);
+  // v1.41: 3단계 권한 드롭다운 이벤트 바인딩
+  tbody.querySelectorAll('.role-level-select').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      const empId = sel.getAttribute('data-empid');
+      const name = sel.getAttribute('data-name');
+      const newLevel = parseInt(sel.value, 10);
+      let confirmMsg = '';
+      if (newLevel === 2) confirmMsg = `'${name}'(${empId}) 님을 슈퍼관리자로 승격하시겠습니까?\n슈퍼관리자는 전체 부서 특근 승인, 인원 관리 및 시스템 총괄 제어가 가능합니다.`;
+      else if (newLevel === 1) confirmMsg = `'${name}'(${empId}) 님을 팀관리자로 지정하시겠습니까?`;
+      else confirmMsg = `'${name}'(${empId}) 님을 일반 팀원으로 변경하시겠습니까?`;
+      if (!confirm(confirmMsg)) { await loadAdminUserTable(); return; }
+
+      if (newLevel === 2) {
+        await updateUserSuperRole(empId, 1);
+      } else if (newLevel === 1) {
+        // 팀관리자: is_super=0, is_admin=1
+        await fetch(`/api/users/${empId}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({is_super: 0, is_admin: 1, admin_emp_id: currentUser.emp_id}) });
+        showToast(`'${name}' 님이 팀관리자로 지정되었습니다.`);
+        await loadAdminUserTable();
+      } else {
+        // 팀원: is_super=0, is_admin=0
+        await fetch(`/api/users/${empId}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({is_super: 0, is_admin: 0, admin_emp_id: currentUser.emp_id}) });
+        showToast(`'${name}' 님이 일반 팀원으로 변경되었습니다.`);
+        await loadAdminUserTable();
+      }
     });
   });
 
-  // 슈퍼관리자 하야 이벤트 바인딩
-  tbody.querySelectorAll('.demote-super-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const empId = btn.getAttribute('data-empid');
-      const name = btn.getAttribute('data-name');
-      if (!confirm(`'${name}'(${empId}) 님의 슈퍼관리자 권한을 해제하고 팀관리자로 하야하시겠습니까?`)) return;
-      await updateUserSuperRole(empId, 0);
-    });
-  });
-
-  tbody.querySelectorAll('.user-admin-toggle').forEach(tg => {
-    tg.addEventListener('change', async () => {
-      const empId = tg.getAttribute('data-empid');
-      const newIsAdmin = tg.checked ? 1 : 0;
-      await updateUserAdminRole(empId, newIsAdmin);
-    });
-  });
-
-  // 팀원 수정 버튼 이벤트 바인딩 (요구사항 1)
+  // 팀원 수정 / 삭제 버튼 이벤트 바인딩
   tbody.querySelectorAll('.edit-user-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const empId = btn.getAttribute('data-empid');
-      openUserEditModal(empId);
-    });
+    btn.addEventListener('click', () => { openUserEditModal(btn.getAttribute('data-empid')); });
   });
-
-  // 팀원 삭제 버튼 이벤트 바인딩
   tbody.querySelectorAll('.delete-user-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const empId = btn.getAttribute('data-empid');
-      const uName = btn.getAttribute('data-name');
-      await handleDeleteUser(empId, uName);
-    });
+    btn.addEventListener('click', async () => { await handleDeleteUser(btn.getAttribute('data-empid'), btn.getAttribute('data-name')); });
   });
 }
 
@@ -2765,16 +2883,19 @@ function openUserEditModal(empId) {
 
   document.getElementById('editUserPosition').value = user.position || '팀원';
 
-  // 관리자 권한 체크박스 설정
-  const adminChk = document.getElementById('editUserIsAdminCheckbox');
-  adminChk.checked = (user.is_admin === 1 || user.is_super === 1);
+  // 권한 단계 셀렉트박스 설정 (요구사항 1: 팀원-팀관리자-슈퍼관리자 단계적 설정)
+  const roleSelect = document.getElementById('editUserRoleSelect');
+  let currentLevel = 0;
+  if (user.is_super === 1) currentLevel = 2;
+  else if (user.is_admin === 1) currentLevel = 1;
+  if (roleSelect) roleSelect.value = String(currentLevel);
 
-  if (!isCurrentUserSuper || isSuperUser) {
-    adminChk.disabled = true;
-    document.getElementById('editUserAdminHelp').textContent = isSuperUser ? '총괄 슈퍼관리자의 권한은 고정입니다.' : '팀관리자 지정 권한은 슈퍼관리자만 변경할 수 있습니다.';
+  if (!isCurrentUserSuper || isSuperUser || user.emp_id === currentUser.emp_id) {
+    if (roleSelect) roleSelect.disabled = true;
+    document.getElementById('editUserRoleHelp').textContent = isSuperUser ? '총괄 슈퍼관리자의 권한은 고정입니다.' : '권한 단계는 슈퍼관리자만 변경할 수 있습니다.';
   } else {
-    adminChk.disabled = false;
-    document.getElementById('editUserAdminHelp').textContent = '팀관리자로 지정하면 해당 소속팀의 특근을 승인하고 팀원을 관리할 수 있습니다.';
+    if (roleSelect) roleSelect.disabled = false;
+    document.getElementById('editUserRoleHelp').textContent = '팀원, 팀관리자, 슈퍼관리자 중 원하는 권한 단계를 선택하세요.';
   }
 
   openModal('userEditModal');
@@ -2790,7 +2911,9 @@ if (editUserForm) {
     const name = document.getElementById('editUserName').value.trim();
     const team = document.getElementById('editUserTeam').value;
     const position = document.getElementById('editUserPosition').value.trim();
-    const isAdmin = document.getElementById('editUserIsAdminCheckbox').checked ? 1 : 0;
+    const roleVal = parseInt(document.getElementById('editUserRoleSelect')?.value || '0', 10);
+    const isSuper = roleVal === 2 ? 1 : 0;
+    const isAdmin = roleVal >= 1 ? 1 : 0;
 
     if (!name) {
       showToast('성명을 입력해주세요.', 'error');
@@ -2810,6 +2933,7 @@ if (editUserForm) {
           team,
           position,
           is_admin: isAdmin,
+          is_super: isSuper,
           admin_emp_id: currentUser ? currentUser.emp_id : ''
         })
       });
@@ -2873,21 +2997,21 @@ async function updateUserAdminRole(empId, isAdmin) {
 
 async function updateUserSuperRole(empId, isSuper) {
   try {
+    const payload = isSuper === 1
+      ? { is_super: 1, is_admin: 1, admin_emp_id: currentUser ? currentUser.emp_id : '' }
+      : { is_super: 0, is_admin: 1, admin_emp_id: currentUser ? currentUser.emp_id : '' }; // 하야 시 팀관리자로
     const res = await fetch(`/api/users/${empId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        is_super: isSuper,
-        admin_emp_id: currentUser ? currentUser.emp_id : ''
-      })
+      body: JSON.stringify(payload)
     });
     const data = await res.json();
     if (!res.ok) {
-      showToast(data.detail || '슈퍼관리자 권한 변경 실패', 'error');
+      showToast(data.detail || '권한 변경 실패', 'error');
       loadAdminUserTable();
       return;
     }
-    const actionText = isSuper === 1 ? '총괄 슈퍼관리자로 승격되었습니다.' : '팀관리자로 하야 처리되었습니다.';
+    const actionText = isSuper === 1 ? '슈퍼관리자로 승격되었습니다.' : '팀관리자로 변경되었습니다.';
     showToast(`'${data.user ? data.user.name : empId}' 님이 ${actionText}`);
     loadAdminUserTable();
   } catch (err) {
@@ -3715,3 +3839,80 @@ if (accessFilterSearchInput) {
   });
 }
 
+// ===== v1.41: 신청자 약식 통계 팝업 =====
+async function showUserStatsPopup(empId, name) {
+  try {
+    const res = await fetch(`/api/users/${encodeURIComponent(empId)}/overtime-stats`);
+    if (!res.ok) { showToast('통계 조회 실패', 'error'); return; }
+    const data = await res.json();
+    const periods = data.periods || {};
+    const byYear = data.by_year || {};
+    const periodLabels = [['주간','이번 주'],['월간','이번 달'],['분기별','이번 분기'],['반기별','이번 반기'],['년간','올해']];
+    const tHeader = `<tr style="background:var(--bg-subtle); font-size:0.8rem;">
+      <th style="padding:5px 10px; text-align:left; border-bottom:1px solid var(--border-color);">기간</th>
+      <th style="padding:5px 8px; text-align:center; border-bottom:1px solid var(--border-color);">대체근무</th>
+      <th style="padding:5px 8px; text-align:center; border-bottom:1px solid var(--border-color);">법정휴일</th>
+      <th style="padding:5px 8px; text-align:center; border-bottom:1px solid var(--border-color);">일반휴일</th>
+      <th style="padding:5px 8px; text-align:center; border-bottom:1px solid var(--border-color);">대체휴무</th>
+      <th style="padding:5px 8px; text-align:center; color:#0284c7; border-bottom:1px solid var(--border-color);">사전차감</th>
+      <th style="padding:5px 8px; text-align:center; border-bottom:1px solid var(--border-color);">신청건수</th>
+    </tr>`;
+    const mkRow = (label, b) => `<tr>
+      <td style="font-weight:700; color:var(--primary); padding:5px 10px; border-bottom:1px solid var(--border-color);">${label}</td>
+      <td style="text-align:center; padding:5px 8px; border-bottom:1px solid var(--border-color);">${b['대체근무']||0}일</td>
+      <td style="text-align:center; padding:5px 8px; border-bottom:1px solid var(--border-color);">${b['법정휴일']||0}일</td>
+      <td style="text-align:center; padding:5px 8px; border-bottom:1px solid var(--border-color);">${b['일반휴일']||0}일</td>
+      <td style="text-align:center; padding:5px 8px; border-bottom:1px solid var(--border-color);">${b['대체휴무']||0}일</td>
+      <td style="text-align:center; font-weight:700; color:#0284c7; padding:5px 8px; border-bottom:1px solid var(--border-color);">${b['사전차감']||0}회</td>
+      <td style="text-align:center; padding:5px 8px; border-bottom:1px solid var(--border-color);">${b['total_records']||0}건</td>
+    </tr>`;
+    const periodRows = periodLabels.map(([k,l]) => mkRow(l, periods[k]||{})).join('');
+    const yearRows = Object.entries(byYear).map(([yr, b]) => mkRow(`${yr}년`, b)).join('') || '<tr><td colspan="7" style="text-align:center; padding:1rem; color:var(--text-muted);">데이터 없음</td></tr>';
+    document.body.insertAdjacentHTML('beforeend', `
+      <div id="userStatsOverlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:9999; display:flex; align-items:center; justify-content:center;" onclick="if(event.target===this)this.remove()">
+        <div style="background:var(--bg-card); border-radius:16px; padding:1.5rem; max-width:700px; width:94%; max-height:85vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.35); border:1px solid var(--border-color);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <h3 style="margin:0; font-size:1.05rem; color:var(--text-main);">📊 <b>${escapeHtml(name)}</b> (${escapeHtml(empId)}) — ${escapeHtml(data.team||'')} 특근 통계</h3>
+            <button onclick="document.getElementById('userStatsOverlay').remove()" style="border:none; background:none; cursor:pointer; font-size:1.4rem; color:var(--text-muted);">✕</button>
+          </div>
+          <div style="font-size:0.87rem; font-weight:700; color:var(--primary); margin-bottom:0.5rem;">📅 기간별 현황</div>
+          <table style="width:100%; border-collapse:collapse; font-size:0.82rem; margin-bottom:1.2rem; border:1px solid var(--border-color); border-radius:8px; overflow:hidden;">${tHeader}${periodRows}</table>
+          <div style="font-size:0.87rem; font-weight:700; color:var(--text-main); margin-bottom:0.5rem;">📆 연도별 현황</div>
+          <table style="width:100%; border-collapse:collapse; font-size:0.82rem; border:1px solid var(--border-color); border-radius:8px; overflow:hidden;">${tHeader}${yearRows}</table>
+          <div style="text-align:right; margin-top:1rem;">
+            <button onclick="document.getElementById('userStatsOverlay').remove()" class="btn btn-secondary btn-sm">닫기</button>
+          </div>
+        </div>
+      </div>`);
+  } catch (err) {
+    console.error(err);
+    showToast('통계 조회 중 오류 발생', 'error');
+  }
+}
+window.showUserStatsPopup = showUserStatsPopup;
+
+// ===== v1.41: user_preferences 자동완성 =====
+async function loadUserPreferences() {
+  if (!currentUser) return;
+  try {
+    const res = await fetch(`/api/users/${encodeURIComponent(currentUser.emp_id)}/preferences`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.exists) return;
+    const prefs = data.preferences || {};
+    const pNoEl = document.getElementById('projectNo');
+    const pLocEl = document.getElementById('location');
+    if (pNoEl && !pNoEl.value && prefs.last_project_no) pNoEl.value = prefs.last_project_no;
+    if (pLocEl && !pLocEl.value && prefs.last_location) pLocEl.value = prefs.last_location;
+  } catch (e) {
+    console.warn('[preferences load]', e);
+  }
+}
+
+// 특근 신청 버튼 클릭 시 선호 정보 자동완성
+const applyOvertimeBtn = document.getElementById('applyOvertimeBtn');
+if (applyOvertimeBtn) {
+  applyOvertimeBtn.addEventListener('click', () => {
+    setTimeout(loadUserPreferences, 50);
+  });
+}

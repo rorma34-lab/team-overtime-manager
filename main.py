@@ -35,7 +35,7 @@ STATIC_DIR = BASE_DIR / "static"
 WEB_BACKUP_DIR = BASE_DIR / "data" / "web_backups"
 WEB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Team Overtime Manager", version="v1.40")
+app = FastAPI(title="Team Overtime Manager", version="v1.41")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -271,6 +271,31 @@ def logout_user(req: UserLoginRequest, request: Request):
     )
     return {"status": "ok"}
 
+@app.get("/api/users/{emp_id}/preferences")
+def get_user_preferences(emp_id: str):
+    """사용자별 마지막 입력 선호 정보 조회 (프로젝트번호, 근무장소)"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM user_preferences WHERE emp_id = ?", (emp_id.strip(),))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return {"exists": True, "preferences": dict(row)}
+    # fallback: 최근 특근 신청 내역에서 가져오기
+    conn2 = get_db_connection()
+    cursor2 = conn2.cursor()
+    cursor2.execute("""
+    SELECT project_no, location FROM overtimes
+    WHERE emp_id = ? AND (project_no != '' OR location != '')
+    ORDER BY created_at DESC, id DESC
+    LIMIT 1
+    """, (emp_id.strip(),))
+    row2 = cursor2.fetchone()
+    conn2.close()
+    if row2:
+        return {"exists": True, "preferences": {"emp_id": emp_id, "last_project_no": row2["project_no"] or "", "last_location": row2["location"] or ""}}
+    return {"exists": False, "preferences": {"emp_id": emp_id, "last_project_no": "", "last_location": ""}}
+
 @app.get("/api/users/{emp_id}/latest-overtime")
 def get_latest_overtime(emp_id: str):
     """해당 사용자의 가장 최근 특근 신청 내역(프로젝트번호, 장소, 사유, 분류) 가이드 제공"""
@@ -413,6 +438,114 @@ def update_user(emp_id: str, req: UserUpdateRequest):
     invalidate_user_role_cache(emp_id)
     return {"message": "회원 정보가 성공적으로 수정되었습니다.", "user": updated}
 
+@app.get("/api/users/{emp_id}/overtime-stats")
+def get_user_overtime_stats(emp_id: str):
+    """관리자용: 특정 사원의 기간별 특근 약식 통계 (주간/월간/분기별/반기별/년간/년별)"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, team FROM users WHERE emp_id = ?", (emp_id.strip(),))
+    user_row = cursor.fetchone()
+    if not user_row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="해당 회원을 찾을 수 없습니다.")
+    user_name = user_row["name"]
+    user_team = user_row["team"]
+
+    cursor.execute("""
+    SELECT id, category, start_date, end_date, sub_holiday_used, is_confirmed, is_pre_deduct
+    FROM overtimes WHERE emp_id = ? ORDER BY start_date ASC
+    """, (emp_id.strip(),))
+    rows = cursor.fetchall()
+    conn.close()
+
+    now = datetime.now()
+    current_year = now.year
+    current_month = now.month
+    current_week_start = now - __import__('datetime').timedelta(days=now.weekday())
+    current_quarter = (current_month - 1) // 3 + 1
+    current_half = 1 if current_month <= 6 else 2
+
+    def make_bucket():
+        return {"대체근무": 0, "일반휴일": 0, "법정휴일": 0, "대체휴무": 0, "사전차감": 0, "사전차감잔여": 0, "total_records": 0}
+
+    periods = {
+        "주간": make_bucket(),
+        "월간": make_bucket(),
+        "분기별": make_bucket(),
+        "반기별": make_bucket(),
+        "년간": make_bucket(),
+    }
+    by_year = {}
+
+    for row in rows:
+        try:
+            d1 = datetime.strptime(row["start_date"], "%Y-%m-%d")
+            d2 = datetime.strptime(row["end_date"] or row["start_date"], "%Y-%m-%d")
+            days = max(1, (d2 - d1).days + 1)
+        except Exception:
+            d1 = d2 = datetime.now()
+            days = 1
+
+        cat = row["category"] or "일반휴일"
+        # 대체휴일 → 대체휴무 표기
+        if cat == "대체휴일":
+            cat = "대체휴무"
+        sub_used = float(row["sub_holiday_used"] or 0)
+        is_pre = int(row["is_pre_deduct"] or 0)
+        yr = d1.year
+        mon = d1.month
+        quarter = (mon - 1) // 3 + 1
+        half = 1 if mon <= 6 else 2
+
+        # 연도별 버킷
+        if yr not in by_year:
+            by_year[yr] = make_bucket()
+        by_year[yr][cat if cat in by_year[yr] else "일반휴일"] += days
+        if is_pre:
+            by_year[yr]["사전차감"] += 1
+        by_year[yr]["total_records"] += 1
+
+        # 기간별 누적 함수
+        def add_to(bucket, add_days, add_sub=0, add_pre=0):
+            bucket[cat if cat in bucket else "일반휴일"] += add_days
+            if add_sub:
+                bucket["대체휴무"] += add_sub
+            if add_pre:
+                bucket["사전차감"] += 1
+            bucket["total_records"] += 1
+
+        # 주간
+        if d1.date() >= current_week_start.date():
+            add_to(periods["주간"], days, 0, is_pre)
+        # 월간
+        if yr == current_year and mon == current_month:
+            add_to(periods["월간"], days, 0, is_pre)
+        # 분기별
+        if yr == current_year and quarter == current_quarter:
+            add_to(periods["분기별"], days, 0, is_pre)
+        # 반기별
+        if yr == current_year and half == current_half:
+            add_to(periods["반기별"], days, 0, is_pre)
+        # 년간
+        if yr == current_year:
+            add_to(periods["년간"], days, 0, is_pre)
+
+    # 사전차감 잔여 계산: 사전차감 횟수 - 대체휴무 횟수 (음수 방지)
+    def calc_remaining(bucket):
+        bucket["사전차감잔여"] = max(0, bucket["사전차감"] - bucket["대체휴무"])
+    for p in periods.values():
+        calc_remaining(p)
+    for p in by_year.values():
+        calc_remaining(p)
+
+    return {
+        "emp_id": emp_id,
+        "name": user_name,
+        "team": user_team,
+        "periods": periods,
+        "by_year": {str(k): v for k, v in sorted(by_year.items(), reverse=True)},
+    }
+
 @app.get("/api/overtimes/my-stats")
 def get_my_overtime_stats(emp_id: str, year: Optional[int] = None):
     """사용자 모드: 연간, 반기별(상/하반기), 월간 특근 통계 제공"""
@@ -423,7 +556,7 @@ def get_my_overtime_stats(emp_id: str, year: Optional[int] = None):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
-    SELECT id, category, start_date, end_date, sub_holiday_used, is_confirmed
+    SELECT id, category, start_date, end_date, sub_holiday_used, is_confirmed, is_pre_deduct
     FROM overtimes
     WHERE emp_id = ? AND start_date LIKE ?
     ORDER BY start_date ASC
@@ -462,6 +595,7 @@ def get_my_overtime_stats(emp_id: str, year: Optional[int] = None):
         end_d = row["end_date"]
         sub_used = float(row["sub_holiday_used"] or 0.0)
         is_conf = int(row["is_confirmed"] or 0)
+        is_pre = int(row["is_pre_deduct"] or 0)
 
         # 일수 계산
         try:
@@ -473,9 +607,11 @@ def get_my_overtime_stats(emp_id: str, year: Optional[int] = None):
         except Exception:
             days = 1
 
-        # 실특근 계산 (일반휴일인 경우만 기본 특근 대상)
+        # 실특근 계산 (일반휴일 - 대체휴무 + 사전차감)
         ot_days = float(days) if cat == "일반휴일" else 0.0
-        act_days = max(0.0, ot_days - sub_used)
+        sub_days = float(days) if cat in ["대체휴무", "대체휴일"] else sub_used
+        pre_days = float(days) if is_pre == 1 else 0.0
+        act_days = max(0.0, ot_days - sub_days + pre_days)
 
         # 1. 연간 누적
         yearly["total_count"] += 1
@@ -740,12 +876,17 @@ def create_overtime(req: OvertimeCreateRequest):
         )
 
     bonus_granted_val = int(req.bonus_granted or 0)
+    is_pre_deduct_val = int(req.is_pre_deduct or 0)
+    trip_start_val = (req.trip_start_date or "").strip()
+    trip_end_val = (req.trip_end_date or "").strip()
 
     cursor.execute("""
     INSERT INTO overtimes (
         emp_id, user_name, team, category, start_date, end_date,
-        project_no, location, reason, sub_holiday_used, sub_holiday_date, is_confirmed, created_at, updated_at, bonus_granted
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+        project_no, location, reason, sub_holiday_used, sub_holiday_date, is_confirmed,
+        is_pre_deduct, trip_start_date, trip_end_date,
+        created_at, updated_at, bonus_granted
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
     """, (
         req.emp_id.strip(),
         user_name,
@@ -758,6 +899,9 @@ def create_overtime(req: OvertimeCreateRequest):
         (req.reason or "").strip(),
         float(req.sub_holiday_used or 0),
         (req.sub_holiday_date or "").strip(),
+        is_pre_deduct_val,
+        trip_start_val,
+        trip_end_val,
         now_str,
         now_str,
         bonus_granted_val
@@ -786,6 +930,26 @@ def create_overtime(req: OvertimeCreateRequest):
             print(f"[create_overtime fetch warning] {e}")
 
     conn.close()
+
+    # user_preferences 자동 업데이트 (프로젝트번호, 장소)
+    proj_val = (req.project_no or "").strip()
+    loc_val = (req.location or "").strip()
+    if proj_val or loc_val:
+        try:
+            pref_conn = get_db_connection()
+            pref_cursor = pref_conn.cursor()
+            pref_cursor.execute("""
+            INSERT INTO user_preferences (emp_id, last_project_no, last_location, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(emp_id) DO UPDATE SET
+                last_project_no = excluded.last_project_no,
+                last_location = excluded.last_location,
+                updated_at = excluded.updated_at
+            """, (req.emp_id.strip(), proj_val, loc_val, now_str))
+            pref_conn.commit()
+            pref_conn.close()
+        except Exception as e:
+            print(f"[user_preferences update warning] {e}")
 
     if not new_record:
         # DB 복제 지연 또는 fetch 실패 시에도 정상 응답을 보장하는 스마트 폴백
@@ -871,6 +1035,7 @@ def get_overtime_summary(
             days = 1
 
         sub_used = float(r.get("sub_holiday_used") or 0)
+        is_pre = int(r.get("is_pre_deduct") or 0)
 
         if emp_id not in user_summary:
             user_summary[emp_id] = {
@@ -882,6 +1047,7 @@ def get_overtime_summary(
                 "excluded_legal_days": 0,
                 "overtime_days": 0,
                 "sub_holiday_used": 0,
+                "pre_deduct_days": 0,
                 "actual_overtime_days": 0,
                 "records_count": 0
             }
@@ -897,8 +1063,14 @@ def get_overtime_summary(
             u["excluded_legal_days"] += days
         elif cat == "일반휴일":
             u["overtime_days"] += days
+        elif cat in ["대체휴무", "대체휴일"]:
+            u["sub_holiday_used"] += days
 
-        u["actual_overtime_days"] = max(0.0, round(u["overtime_days"] - u["sub_holiday_used"], 1))
+        if is_pre == 1:
+            u["pre_deduct_days"] += days
+
+        # 실특근일 = 일반휴일 - 대체휴무 + 사전차감
+        u["actual_overtime_days"] = max(0.0, round(u["overtime_days"] - u["sub_holiday_used"] + u["pre_deduct_days"], 1))
 
         if t not in team_summary:
             team_summary[t] = {
@@ -908,6 +1080,7 @@ def get_overtime_summary(
                 "excluded_days": 0,
                 "overtime_days": 0,
                 "sub_holiday_used": 0,
+                "pre_deduct_days": 0,
                 "actual_overtime_days": 0
             }
         tm = team_summary[t]
@@ -917,8 +1090,14 @@ def get_overtime_summary(
             tm["excluded_days"] += days
         elif cat == "일반휴일":
             tm["overtime_days"] += days
+        elif cat in ["대체휴무", "대체휴일"]:
+            tm["sub_holiday_used"] += days
+
+        if is_pre == 1:
+            tm["pre_deduct_days"] += days
+
         tm["sub_holiday_used"] += sub_used
-        tm["actual_overtime_days"] = max(0.0, round(tm["overtime_days"] - tm["sub_holiday_used"], 1))
+        tm["actual_overtime_days"] = max(0.0, round(tm["overtime_days"] - tm["sub_holiday_used"] + tm["pre_deduct_days"], 1))
 
     team_list = []
     for t_name, t_info in team_summary.items():
@@ -997,6 +1176,11 @@ def update_overtime(item_id: int, req: OvertimeUpdateRequest):
 
     changed_name = caller["name"] if caller else req.changed_by
 
+    # 신규 필드 처리
+    is_pre_deduct_val = int(req.is_pre_deduct) if req.is_pre_deduct is not None else int(prev_data.get("is_pre_deduct") or 0)
+    trip_start_val = (req.trip_start_date or "").strip() if req.trip_start_date is not None else (prev_data.get("trip_start_date") or "")
+    trip_end_val = (req.trip_end_date or "").strip() if req.trip_end_date is not None else (prev_data.get("trip_end_date") or "")
+
     bonus_clause = ""
     bonus_params = []
     if (is_super or is_team_admin) and req.bonus_granted is not None:
@@ -1007,7 +1191,9 @@ def update_overtime(item_id: int, req: OvertimeUpdateRequest):
     UPDATE overtimes SET
         category = ?, start_date = ?, end_date = ?,
         project_no = ?, location = ?, reason = ?,
-        sub_holiday_used = ?, sub_holiday_date = ?, updated_at = ?
+        sub_holiday_used = ?, sub_holiday_date = ?,
+        is_pre_deduct = ?, trip_start_date = ?, trip_end_date = ?,
+        updated_at = ?
         {bonus_clause}
     WHERE id = ?
     """, (
@@ -1019,6 +1205,9 @@ def update_overtime(item_id: int, req: OvertimeUpdateRequest):
         (req.reason or "").strip(),
         float(req.sub_holiday_used or 0),
         (req.sub_holiday_date or "").strip(),
+        is_pre_deduct_val,
+        trip_start_val,
+        trip_end_val,
         now_str,
         *bonus_params,
         item_id
@@ -1251,6 +1440,7 @@ async def export_settlement(req: Request):
         except Exception:
             days = 1
         sub_used = float(r.get("sub_holiday_used") or 0)
+        is_pre = int(r.get("is_pre_deduct") or 0)
 
         if emp_id not in user_summary_map:
             user_summary_map[emp_id] = {
@@ -1262,6 +1452,7 @@ async def export_settlement(req: Request):
                 "excluded_legal_days": 0,
                 "overtime_days": 0,
                 "sub_holiday_used": 0,
+                "pre_deduct_days": 0,
                 "actual_overtime_days": 0,
                 "records_count": 0
             }
@@ -1275,7 +1466,13 @@ async def export_settlement(req: Request):
             u["excluded_legal_days"] += days
         elif cat == "일반휴일":
             u["overtime_days"] += days
-        u["actual_overtime_days"] = max(0.0, round(u["overtime_days"] - u["sub_holiday_used"], 1))
+        elif cat in ["대체휴무", "대체휴일"]:
+            u["sub_holiday_used"] += days
+
+        if is_pre == 1:
+            u["pre_deduct_days"] += days
+
+        u["actual_overtime_days"] = max(0.0, round(u["overtime_days"] - u["sub_holiday_used"] + u["pre_deduct_days"], 1))
 
         if t not in team_summary_map:
             team_summary_map[t] = {
@@ -1285,6 +1482,7 @@ async def export_settlement(req: Request):
                 "excluded_days": 0,
                 "overtime_days": 0,
                 "sub_holiday_used": 0,
+                "pre_deduct_days": 0,
                 "actual_overtime_days": 0
             }
         tm = team_summary_map[t]
@@ -1294,8 +1492,14 @@ async def export_settlement(req: Request):
             tm["excluded_days"] += days
         elif cat == "일반휴일":
             tm["overtime_days"] += days
+        elif cat in ["대체휴무", "대체휴일"]:
+            tm["sub_holiday_used"] += days
+
+        if is_pre == 1:
+            tm["pre_deduct_days"] += days
+
         tm["sub_holiday_used"] += sub_used
-        tm["actual_overtime_days"] = max(0.0, round(tm["overtime_days"] - tm["sub_holiday_used"], 1))
+        tm["actual_overtime_days"] = max(0.0, round(tm["overtime_days"] - tm["sub_holiday_used"] + tm["pre_deduct_days"], 1))
 
     user_list = sorted(user_summary_map.values(), key=lambda x: (x["team"], x["name"]))
     team_list = []

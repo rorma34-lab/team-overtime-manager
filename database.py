@@ -177,7 +177,7 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_created ON access_logs(created_at);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_status ON access_logs(status);")
 
-    # 대체휴일 사용 및 보너스 부여 컬럼 마이그레이션
+    # 컬럼 마이그레이션 (신구 버전 호환)
     cursor.execute("PRAGMA table_info(overtimes);")
     columns = [row["name"] for row in cursor.fetchall()]
     if "sub_holiday_used" not in columns:
@@ -186,6 +186,25 @@ def init_db():
         cursor.execute("ALTER TABLE overtimes ADD COLUMN sub_holiday_date TEXT DEFAULT '';")
     if "bonus_granted" not in columns:
         cursor.execute("ALTER TABLE overtimes ADD COLUMN bonus_granted INTEGER DEFAULT 0;")
+    # v1.41: 사전차감 토글, 대체휴무 출장기간
+    if "is_pre_deduct" not in columns:
+        cursor.execute("ALTER TABLE overtimes ADD COLUMN is_pre_deduct INTEGER DEFAULT 0;")
+    if "trip_start_date" not in columns:
+        cursor.execute("ALTER TABLE overtimes ADD COLUMN trip_start_date TEXT DEFAULT '';")
+    if "trip_end_date" not in columns:
+        cursor.execute("ALTER TABLE overtimes ADD COLUMN trip_end_date TEXT DEFAULT '';")
+
+    # v1.41: 사용자별 마지막 입력 선호 정보 테이블
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS user_preferences (
+        emp_id TEXT PRIMARY KEY,
+        last_project_no TEXT DEFAULT '',
+        last_location TEXT DEFAULT '',
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (emp_id) REFERENCES users(emp_id) ON DELETE CASCADE
+    )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_prefs_emp ON user_preferences(emp_id);")
 
     # 4. 소속팀(부서) 관리 테이블
     cursor.execute("""
