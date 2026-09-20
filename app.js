@@ -2949,6 +2949,8 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
         const actualOvertime = Math.max(0, Math.round((u.normal_holiday_days - u.pre_deduct_count - (totalSub - u.trip_pre_deduct_count)) * 10) / 10);
         // 사전차감 잔여 = 총 사전차감 - 출장내 사전차감
         const preRemain = Math.max(0, u.pre_deduct_count - u.trip_pre_deduct_count);
+        // 최종 실특근일 + 보너스 합산
+        const actualOvertimeWithBonus = Math.max(0, Math.round((actualOvertime + (u.bonus_count || 0)) * 10) / 10);
         return {
           "순번": idx + 1,
           "사원번호": u.emp_id,
@@ -2963,6 +2965,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
           "사전차감 잔여수": preRemain,
           "★ 최종 실특근일": actualOvertime,
           "보너스 부여 (건)": u.bonus_count,
+          "★ 최종 실특근일+보너스": actualOvertimeWithBonus,
           "신청건수": u.records_count
         };
       });
@@ -2983,6 +2986,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
           "사전차감 잔여수": sheet2Rows.reduce((a, b) => a + (b["사전차감 잔여수"] || 0), 0),
           "★ 최종 실특근일": Math.round(sheet2Rows.reduce((a, b) => a + (b["★ 최종 실특근일"] || 0), 0) * 10) / 10,
           "보너스 부여 (건)": sheet2Rows.reduce((a, b) => a + (b["보너스 부여 (건)"] || 0), 0),
+          "★ 최종 실특근일+보너스": Math.round(sheet2Rows.reduce((a, b) => a + (b["★ 최종 실특근일+보너스"] || 0), 0) * 10) / 10,
           "신청건수": sheet2Rows.reduce((a, b) => a + (b["신청건수"] || 0), 0)
         });
       }
