@@ -37,7 +37,7 @@
         <div class="brand-logo">⏰</div>
         <div>
           <span class="brand-title">스마트 특근 관리</span>
-          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.42</span>
+          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.43</span>
           <span class="brand-subtitle">Smart Overtime System</span>
         </div>
       </div>
@@ -421,6 +421,9 @@
               </button>
               <button class="btn btn-secondary btn-sm" id="batchUnconfirmBtn">
                 ✕ 일괄 취소
+              </button>
+              <button class="btn btn-danger btn-sm" id="batchDeleteBtn" style="background: #ef4444; border-color: #dc2626; color: #ffffff; font-weight: 700;">
+                🗑️ 선택 일괄 삭제
               </button>
               <button class="btn btn-primary btn-sm" id="exportExcelBtn">
                 📥 엑셀(.xlsx) 내보내기
@@ -864,19 +867,19 @@
     </div>
   </div>
 
-  <!-- 2. 특근 내역 수정 모달 -->
-  <div class="modal-overlay" id="editModal">
+  <!-- 2-A. 사용자 모드: 특근 내역 수정 모달 (사전차감/보너스 일체 미노출) -->
+  <div class="modal-overlay" id="userOvertimeEditModal">
     <div class="modal-content">
       <div class="modal-header">
         <h3 class="modal-title">✏️ 특근 내역 수정</h3>
-        <button class="modal-close" data-close="editModal">&times;</button>
+        <button class="modal-close" data-close="userOvertimeEditModal">&times;</button>
       </div>
-      <form id="editOvertimeForm">
-        <input type="hidden" id="editId">
+      <form id="userEditOvertimeForm">
+        <input type="hidden" id="userEditId">
         <div class="modal-body">
           <div class="input-group">
             <label class="input-label">특근 분류</label>
-            <select id="editCategory" class="input-field" required>
+            <select id="userEditCategory" class="input-field" required>
               <option value="일반휴일">일반휴일</option>
               <option value="법정휴일">법정휴일</option>
               <option value="대체근무">대체근무</option>
@@ -886,57 +889,139 @@
           <div class="date-row">
             <div class="input-group">
               <label class="input-label">시작일</label>
-              <input type="date" id="editStartDate" class="input-field" required>
+              <input type="date" id="userEditStartDate" class="input-field" required>
             </div>
             <div class="input-group">
               <label class="input-label">종료일</label>
-              <input type="date" id="editEndDate" class="input-field" required>
+              <input type="date" id="userEditEndDate" class="input-field" required>
             </div>
           </div>
-          <!-- 대체휴무 선택 시 출장기간 입력란 (기본 숨김) -->
-          <div class="date-row" id="editTripDatesRow" style="display: none; background: #ecfdf5; padding: 0.65rem 0.85rem; border-radius: var(--radius-md); border: 1px solid #a7f3d0; margin-bottom: 0.85rem;">
+          <!-- 대체휴무 선택 시 출장기간 입력란 -->
+          <div class="date-row" id="userEditTripDatesRow" style="display: none; background: #ecfdf5; padding: 0.65rem 0.85rem; border-radius: var(--radius-md); border: 1px solid #a7f3d0; margin-bottom: 0.85rem;">
             <div class="input-group" style="margin-bottom: 0;">
               <label class="input-label" style="color: #065f46; font-weight: 700;">출장 시작일</label>
-              <input type="date" id="editTripStartDate" class="input-field" style="background:#fff;">
+              <input type="date" id="userEditTripStartDate" class="input-field" style="background:#fff;">
             </div>
             <div class="input-group" style="margin-bottom: 0;">
               <label class="input-label" style="color: #065f46; font-weight: 700;">출장 종료일</label>
-              <input type="date" id="editTripEndDate" class="input-field" style="background:#fff;">
+              <input type="date" id="userEditTripEndDate" class="input-field" style="background:#fff;">
             </div>
           </div>
           <div class="date-row">
             <div class="input-group">
               <label class="input-label">프로젝트 번호</label>
-              <input type="text" id="editProjectNo" class="input-field">
+              <input type="text" id="userEditProjectNo" class="input-field">
             </div>
             <div class="input-group">
               <label class="input-label">근무 장소</label>
-              <input type="text" id="editLocation" class="input-field">
-            </div>
-          </div>
-          <!-- 관리자 전용: 사전차감 토글 버튼 (요구사항 3: 기간/개수 삭제하고 토글형 버튼 적용) -->
-          <div id="editPreDeductRow" style="background: #f8fafc; border: 1.5px solid var(--border-color); padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 0.85rem; display: none; align-items: center; justify-content: space-between;">
-            <div>
-              <span style="font-size: 0.88rem; font-weight: 700; color: var(--text-main);">⚡ 사전차감 적용</span>
-              <p style="font-size: 0.75rem; color: var(--text-muted); margin: 2px 0 0 0;">출장기간 내 특근에 대해 사전차감을 적용합니다.</p>
-            </div>
-            <div>
-              <button type="button" id="editPreDeductToggleBtn" class="btn btn-sm btn-secondary" style="font-weight: 700; min-width: 90px; border-radius: 20px; transition: all 0.2s;">
-                OFF
-              </button>
-              <input type="hidden" id="editIsPreDeduct" value="0">
+              <input type="text" id="userEditLocation" class="input-field">
             </div>
           </div>
           <div class="input-group" style="margin-top: 0.85rem;">
             <label class="input-label">특근/휴무 사유</label>
-            <input type="text" id="editReason" class="input-field" required>
+            <input type="text" id="userEditReason" class="input-field" required>
           </div>
           <p style="font-size: 0.78rem; color: var(--text-light); margin-top: 0.5rem;">
             * 수정한 내역은 변경 이력(Audit Log)에 안전하게 보존됩니다.
           </p>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary btn-sm" data-close="editModal">취소</button>
+          <button type="button" class="btn btn-secondary btn-sm" data-close="userOvertimeEditModal">취소</button>
+          <button type="submit" class="btn btn-primary btn-sm">수정 내용 저장</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2-B. 관리자 모드: 팀원 특근 내역 수정 모달 (사전차감 및 보너스 부여 토글 완비) -->
+  <div class="modal-overlay" id="adminEditModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">🛠️ [관리자] 팀원 특근 내역 수정</h3>
+        <button class="modal-close" data-close="adminEditModal">&times;</button>
+      </div>
+      <form id="adminEditOvertimeForm">
+        <input type="hidden" id="adminEditId">
+        <div class="modal-body">
+          <div class="input-group">
+            <label class="input-label">특근 분류</label>
+            <select id="adminEditCategory" class="input-field" required>
+              <option value="일반휴일">일반휴일</option>
+              <option value="법정휴일">법정휴일</option>
+              <option value="대체근무">대체근무</option>
+              <option value="대체휴무">대체휴무</option>
+            </select>
+          </div>
+          <div class="date-row">
+            <div class="input-group">
+              <label class="input-label">시작일</label>
+              <input type="date" id="adminEditStartDate" class="input-field" required>
+            </div>
+            <div class="input-group">
+              <label class="input-label">종료일</label>
+              <input type="date" id="adminEditEndDate" class="input-field" required>
+            </div>
+          </div>
+          <!-- 대체휴무 선택 시 출장기간 입력란 -->
+          <div class="date-row" id="adminEditTripDatesRow" style="display: none; background: #ecfdf5; padding: 0.65rem 0.85rem; border-radius: var(--radius-md); border: 1px solid #a7f3d0; margin-bottom: 0.85rem;">
+            <div class="input-group" style="margin-bottom: 0;">
+              <label class="input-label" style="color: #065f46; font-weight: 700;">출장 시작일</label>
+              <input type="date" id="adminEditTripStartDate" class="input-field" style="background:#fff;">
+            </div>
+            <div class="input-group" style="margin-bottom: 0;">
+              <label class="input-label" style="color: #065f46; font-weight: 700;">출장 종료일</label>
+              <input type="date" id="adminEditTripEndDate" class="input-field" style="background:#fff;">
+            </div>
+          </div>
+          <div class="date-row">
+            <div class="input-group">
+              <label class="input-label">프로젝트 번호</label>
+              <input type="text" id="adminEditProjectNo" class="input-field">
+            </div>
+            <div class="input-group">
+              <label class="input-label">근무 장소</label>
+              <input type="text" id="adminEditLocation" class="input-field">
+            </div>
+          </div>
+
+          <!-- 관리자 전용: 1. 사전차감 토글 버튼 -->
+          <div id="adminEditPreDeductRow" style="background: #f8fafc; border: 1.5px solid var(--border-color); padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 0.65rem; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <span style="font-size: 0.88rem; font-weight: 700; color: var(--text-main);">⚡ 사전차감 적용</span>
+              <p style="font-size: 0.75rem; color: var(--text-muted); margin: 2px 0 0 0;">출장기간 내 특근에 대해 사전차감을 적용합니다.</p>
+            </div>
+            <div>
+              <button type="button" id="adminEditPreDeductToggleBtn" class="btn btn-sm btn-secondary" style="font-weight: 700; min-width: 90px; border-radius: 20px; transition: all 0.2s;">
+                OFF
+              </button>
+              <input type="hidden" id="adminEditIsPreDeduct" value="0">
+            </div>
+          </div>
+
+          <!-- 관리자 전용: 2. 보너스 부여 여부 토글 버튼 (요구사항 3) -->
+          <div id="adminEditBonusRow" style="background: #faf5ff; border: 1.5px solid #d8b4fe; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 0.85rem; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <span style="font-size: 0.88rem; font-weight: 700; color: #7e22ce;">🎁 보너스 부여 여부</span>
+              <p style="font-size: 0.75rem; color: #9333ea; margin: 2px 0 0 0;">해당 특근 건에 보너스(🎁)를 부여할지 설정합니다.</p>
+            </div>
+            <div>
+              <button type="button" id="adminEditBonusToggleBtn" class="btn btn-sm btn-secondary" style="font-weight: 700; min-width: 90px; border-radius: 20px; transition: all 0.2s;">
+                미부여 OFF
+              </button>
+              <input type="hidden" id="adminEditBonusGranted" value="0">
+            </div>
+          </div>
+
+          <div class="input-group" style="margin-top: 0.85rem;">
+            <label class="input-label">특근/휴무 사유</label>
+            <input type="text" id="adminEditReason" class="input-field" required>
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-light); margin-top: 0.5rem;">
+            * 수정한 내역은 변경 이력(Audit Log)에 안전하게 보존됩니다.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-close="adminEditModal">취소</button>
           <button type="submit" class="btn btn-primary btn-sm">수정 내용 저장</button>
         </div>
       </form>
@@ -1010,11 +1095,31 @@
       </div>
       <div class="modal-body" style="max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1.25rem;">
         
-        <!-- v1.42 (Latest) -->
+        <!-- v1.43 (Latest) -->
         <div style="background: var(--bg-card); border: 2px solid var(--primary); padding: 1.1rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
           <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-            <span style="background: var(--primary); color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.42</span>
+            <span style="background: var(--primary); color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.43</span>
             <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-main);">최신 정식 릴리즈 (Latest)</span>
+            <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-18</span>
+          </div>
+          <div style="font-weight: 800; color: var(--primary); margin-bottom: 0.5rem; font-size: 0.88rem;">
+            🚀 v1.43 엑셀 정산표 공식 개편, 수정 모달 권한 분리, 보너스 수정 & 선택 일괄 삭제
+          </div>
+          <ul style="margin-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.84rem; line-height: 1.6; color: var(--text-main);">
+            <li><b>개인별 정산표 총 특근일수 수식 개편</b>: [총 특근일수 = 대체근무 + 법정휴일 + 일반휴일] (대체휴무 완전 제외 표준화)</li>
+            <li><b>엑셀 중복 컬럼 정리 및 보너스 개수 추가</b>: '대체휴가 사용일수' 중복 열 삭제 및 '보너스 부여 (건)' 신규 열 추가</li>
+            <li><b>사용자 / 관리자 특근 수정 모달 분리</b>: 사용자 수정 창에서 사전차감/보너스 일체 미노출 및 관리자 전용 수정 창 완전 독립 분리</li>
+            <li><b>관리자 특근 수정 시 [보너스 부여 여부] 원클릭 토글</b>: 사전차감과 함께 보너스(🎁) 부여 여부를 관리자가 직접 ON/OFF 수정 가능</li>
+            <li><b>관리자 테이블 선택 일괄 삭제(Batch Delete) 신설</b>: 여러 특근 건을 체크박스로 다중 선택 후 일괄 삭제 지원 (안전 컨펌 및 감사 로그 자동 기록)</li>
+            <li><b>최신 공식 PPTX 매뉴얼 3종 배포 동기화</b>: v1.43 기준 사용자용, 관리자용, 통합본 매뉴얼 최신화 완료</li>
+          </ul>
+        </div>
+
+        <!-- v1.42 -->
+        <div style="background: var(--bg-subtle); border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-md);">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem;">
+            <span style="background: var(--text-muted); color: #fff; font-size: 0.8rem; font-weight: 700; padding: 2px 10px; border-radius: 9999px;">v1.42</span>
+            <span style="font-size: 0.9rem; font-weight: 700; color: var(--text-main);">이전 릴리즈</span>
             <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-18</span>
           </div>
           <div style="font-weight: 800; color: var(--primary); margin-bottom: 0.5rem; font-size: 0.88rem;">
@@ -1566,6 +1671,6 @@
 
   <!-- 클라이언트 사이드 고속 엑셀 생성 라이브러리 (SheetJS) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="/js/app.js?v=20260918_v142_fix1"></script>
+  <script src="/js/app.js?v=20260918_v143"></script>
 </body>
 </html>

@@ -35,7 +35,7 @@ STATIC_DIR = BASE_DIR / "static"
 WEB_BACKUP_DIR = BASE_DIR / "data" / "web_backups"
 WEB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Team Overtime Manager", version="v1.42")
+app = FastAPI(title="Team Overtime Manager", version="v1.43")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -1125,11 +1125,11 @@ def get_overtime_summary(
                 "trip_pre_deduct_count": 0,
                 "pre_deduct_remaining": 0,
                 "actual_overtime_days": 0,
+                "bonus_count": 0,
                 "records_count": 0
             }
 
         u = user_summary[emp_id]
-        u["total_days"] += days
         u["records_count"] += 1
         u["sub_holiday_used"] += sub_used
 
@@ -1141,6 +1141,13 @@ def get_overtime_summary(
             u["overtime_days"] += days
         elif cat in ["대체휴무", "대체휴일"]:
             u["sub_holiday_used"] += days
+
+        # 요구사항 1-1: 총 특근일수 = 대체근무 + 법정휴일 + 일반휴일 (대체휴무 제외)
+        u["total_days"] = int(u["excluded_sub_days"] + u["excluded_legal_days"] + u["overtime_days"])
+
+        # 요구사항 1-3: 보너스 개수 집계
+        if int(r.get("bonus_granted") or 0) == 1:
+            u["bonus_count"] += 1
 
         if is_pre == 1:
             u["pre_deduct_days"] += days
@@ -1169,15 +1176,21 @@ def get_overtime_summary(
                 "overtime_days": 0,
                 "sub_holiday_used": 0,
                 "pre_deduct_days": 0,
-                "actual_overtime_days": 0
+                "actual_overtime_days": 0,
+                "bonus_count": 0
             }
         tm = team_summary[t]
         tm["members"].add(emp_id)
-        tm["total_days"] += days
         if cat in ["대체근무", "법정휴일"]:
             tm["excluded_days"] += days
         elif cat == "일반휴일":
             tm["overtime_days"] += days
+        elif cat in ["대체휴무", "대체휴일"]:
+            tm["sub_holiday_used"] += days
+
+        tm["total_days"] = int(tm["excluded_days"] + tm["overtime_days"])
+        if int(r.get("bonus_granted") or 0) == 1:
+            tm["bonus_count"] += 1
         elif cat in ["대체휴무", "대체휴일"]:
             tm["sub_holiday_used"] += days
 
@@ -1525,6 +1538,53 @@ def batch_confirm_overtimes(payload: dict):
 
     return {"message": f"{len(ids)}건이 일괄 처리되었습니다."}
 
+@app.post("/api/overtimes/batch-delete")
+def batch_delete_overtimes(payload: dict):
+    """선택된 다중 특근 일괄 삭제 (팀관리자는 본인 소속팀만 삭제 가능)"""
+    ids = payload.get("ids", [])
+    admin_emp_id = payload.get("admin_emp_id", "")
+
+    if not ids:
+        raise HTTPException(status_code=400, detail="선택된 항목이 없습니다.")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, is_super, is_admin, team FROM users WHERE emp_id = ?", (admin_emp_id,))
+    u_row = cursor.fetchone()
+    if not u_row or (u_row["is_super"] != 1 and u_row["is_admin"] != 1):
+        conn.close()
+        raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다.")
+
+    is_team_admin = (u_row["is_super"] != 1)
+    admin_team = u_row["team"]
+    admin_name = u_row["name"] if u_row else admin_emp_id
+
+    deleted_count = 0
+    for itm_id in ids:
+        cursor.execute("SELECT * FROM overtimes WHERE id = ?", (itm_id,))
+        ot_chk = cursor.fetchone()
+        if not ot_chk:
+            continue
+        if is_team_admin and ot_chk["team"] != admin_team:
+            continue  # 타 팀 특근은 팀관리자가 일괄 삭제 시 건너뜀
+
+        prev_data = dict(ot_chk)
+        cursor.execute("DELETE FROM overtimes WHERE id = ?", (itm_id,))
+        log_audit(
+            overtime_id=itm_id,
+            action="일괄삭제",
+            changed_by=admin_emp_id,
+            changed_by_name=admin_name,
+            previous_data=prev_data,
+            new_data=None
+        )
+        deleted_count += 1
+
+    conn.commit()
+    conn.close()
+
+    return {"message": f"{deleted_count}건의 특근 내역이 일괄 삭제되었습니다.", "deleted_count": deleted_count}
+
 # ----------------- 엑셀 내보내기 & 매뉴얼 다운로드 -----------------
 
 @app.post("/api/overtimes/export-settlement")
@@ -1609,10 +1669,10 @@ async def export_settlement(req: Request):
                 "trip_pre_deduct_count": 0,
                 "pre_deduct_remaining": 0,
                 "actual_overtime_days": 0,
+                "bonus_count": 0,
                 "records_count": 0
             }
         u = user_summary_map[emp_id]
-        u["total_days"] += days
         u["records_count"] += 1
         u["sub_holiday_used"] += sub_used
         if cat == "대체근무":
@@ -1623,6 +1683,12 @@ async def export_settlement(req: Request):
             u["overtime_days"] += days
         elif cat in ["대체휴무", "대체휴일"]:
             u["sub_holiday_used"] += days
+
+        # 총 특근일수 = 대체근무 + 법정휴일 + 일반휴일 (대체휴무 제외)
+        u["total_days"] = int(u["excluded_sub_days"] + u["excluded_legal_days"] + u["overtime_days"])
+
+        if int(r.get("bonus_granted") or 0) == 1:
+            u["bonus_count"] += 1
 
         if is_pre == 1:
             u["pre_deduct_days"] += days
@@ -1650,17 +1716,21 @@ async def export_settlement(req: Request):
                 "overtime_days": 0,
                 "sub_holiday_used": 0,
                 "pre_deduct_days": 0,
-                "actual_overtime_days": 0
+                "actual_overtime_days": 0,
+                "bonus_count": 0
             }
         tm = team_summary_map[t]
         tm["members"].add(emp_id)
-        tm["total_days"] += days
         if cat in ["대체근무", "법정휴일"]:
             tm["excluded_days"] += days
         elif cat == "일반휴일":
             tm["overtime_days"] += days
         elif cat in ["대체휴무", "대체휴일"]:
             tm["sub_holiday_used"] += days
+
+        tm["total_days"] = int(tm["excluded_days"] + tm["overtime_days"])
+        if int(r.get("bonus_granted") or 0) == 1:
+            tm["bonus_count"] += 1
 
         if is_pre == 1:
             tm["pre_deduct_days"] += days

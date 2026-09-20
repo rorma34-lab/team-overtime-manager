@@ -1033,7 +1033,7 @@ function renderUserRecords() {
       <div class="record-actions">
         <button class="btn btn-secondary btn-sm" onclick="openHistoryModal(${item.id})">이력</button>
         ${(!isConf || (currentUser && (currentUser.is_admin === 1 || currentUser.is_super === 1))) ? `
-          <button class="btn btn-secondary btn-sm" onclick="openEditModal(${item.id})">수정</button>
+          <button class="btn btn-secondary btn-sm" onclick="openUserOvertimeEditModal(${item.id})">수정</button>
           <button class="btn btn-danger btn-sm" onclick="handleDeleteOvertime(${item.id})">삭제</button>
         ` : `
           <span class="badge" style="background: #ecfdf5; color: #065f46; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; font-weight: 700; border: 1px solid #a7f3d0;" title="승인 완료된 특근은 관리자만 수정 및 삭제할 수 있습니다.">🔒 승인완료 (수정/삭제 불가)</span>
@@ -1337,43 +1337,10 @@ function renderUserCalendar(year, month) {
 }
 
 // ===== 6. 수정/삭제/이력 모달 =====
-function setEditPreDeduct(active) {
-  const btn = document.getElementById('editPreDeductToggleBtn');
-  const input = document.getElementById('editIsPreDeduct');
-  if (!btn || !input) return;
-  input.value = active ? '1' : '0';
-  if (active) {
-    btn.textContent = 'ON';
-    btn.className = 'btn btn-sm btn-primary';
-    btn.style.background = 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)';
-    btn.style.color = '#fff';
-  } else {
-    btn.textContent = 'OFF';
-    btn.className = 'btn btn-sm btn-secondary';
-    btn.style.background = '';
-    btn.style.color = '';
-  }
-}
-
-const editPreDeductToggleBtn = document.getElementById('editPreDeductToggleBtn');
-if (editPreDeductToggleBtn) {
-  editPreDeductToggleBtn.addEventListener('click', () => {
-    const currentVal = document.getElementById('editIsPreDeduct')?.value === '1';
-    setEditPreDeduct(!currentVal);
-  });
-}
-
-const editCategoryEl = document.getElementById('editCategory');
-if (editCategoryEl) {
-  editCategoryEl.addEventListener('change', () => {
-    const tripRow = document.getElementById('editTripDatesRow');
-    if (tripRow) {
-      tripRow.style.display = editCategoryEl.value === '대체휴무' ? 'grid' : 'none';
-    }
-  });
-}
-
-async function openEditModal(itemId) {
+// =========================================================================
+// 2-A. 사용자 모드: 특근 내역 수정 (사전차감 / 보너스 일체 미노출)
+// =========================================================================
+async function openUserOvertimeEditModal(itemId) {
   try {
     const res = await fetch(`/api/overtimes/${itemId}`);
     const data = await res.json();
@@ -1387,96 +1354,281 @@ async function openEditModal(itemId) {
       showToast('승인 완료된 특근은 관리자만 수정할 수 있습니다.', 'error');
       return;
     }
-    document.getElementById('editId').value = item.id;
-    document.getElementById('editCategory').value = item.category;
-    document.getElementById('editStartDate').value = item.start_date;
-    document.getElementById('editEndDate').value = item.end_date;
-    document.getElementById('editProjectNo').value = item.project_no || '';
-    document.getElementById('editLocation').value = item.location || '';
-    document.getElementById('editReason').value = item.reason || '';
+    document.getElementById('userEditId').value = item.id;
+    document.getElementById('userEditCategory').value = item.category;
+    document.getElementById('userEditStartDate').value = item.start_date;
+    document.getElementById('userEditEndDate').value = item.end_date;
+    document.getElementById('userEditProjectNo').value = item.project_no || '';
+    document.getElementById('userEditLocation').value = item.location || '';
+    document.getElementById('userEditReason').value = item.reason || '';
 
     // 대체휴무 출장기간 표시 제어
-    const tripRow = document.getElementById('editTripDatesRow');
+    const tripRow = document.getElementById('userEditTripDatesRow');
     if (tripRow) {
       tripRow.style.display = item.category === '대체휴무' ? 'grid' : 'none';
     }
-    const tripStartEl = document.getElementById('editTripStartDate');
-    const tripEndEl = document.getElementById('editTripEndDate');
+    const tripStartEl = document.getElementById('userEditTripStartDate');
+    const tripEndEl = document.getElementById('userEditTripEndDate');
     if (tripStartEl) tripStartEl.value = item.trip_start_date || '';
     if (tripEndEl) tripEndEl.value = item.trip_end_date || '';
 
-    // 관리자 전용: 사전차감 토글형 버튼 제어
-    const preRow = document.getElementById('editPreDeductRow');
-    if (preRow) {
-      const isAdmin = currentMode === 'admin' || (currentUser && (currentUser.is_admin || currentUser.is_super));
-      preRow.style.display = isAdmin ? 'flex' : 'none';
-    }
-    setEditPreDeduct(item.is_pre_deduct === 1);
-
-    openModal('editModal');
+    openModal('userOvertimeEditModal');
   } catch (err) {
     console.error(err);
     showToast('통신 오류', 'error');
   }
 }
 
-document.getElementById('editOvertimeForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const id = document.getElementById('editId').value;
-  const category = document.getElementById('editCategory').value;
-  const startDate = document.getElementById('editStartDate').value;
-  const endDate = document.getElementById('editEndDate').value;
-  const projectNo = document.getElementById('editProjectNo').value.trim();
-  const location = document.getElementById('editLocation').value.trim();
-  const reason = document.getElementById('editReason').value.trim();
+const userEditCategoryEl = document.getElementById('userEditCategory');
+if (userEditCategoryEl) {
+  userEditCategoryEl.addEventListener('change', () => {
+    const tripRow = document.getElementById('userEditTripDatesRow');
+    if (tripRow) {
+      tripRow.style.display = userEditCategoryEl.value === '대체휴무' ? 'grid' : 'none';
+    }
+  });
+}
 
-  const tripStartDate = (document.getElementById('editTripStartDate')?.value || '').trim();
-  const tripEndDate = (document.getElementById('editTripEndDate')?.value || '').trim();
-  const isPreDeduct = document.getElementById('editIsPreDeduct')?.value === '1' ? 1 : 0;
+const userEditOvertimeForm = document.getElementById('userEditOvertimeForm');
+if (userEditOvertimeForm) {
+  userEditOvertimeForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('userEditId').value;
+    const category = document.getElementById('userEditCategory').value;
+    const startDate = document.getElementById('userEditStartDate').value;
+    const endDate = document.getElementById('userEditEndDate').value;
+    const projectNo = document.getElementById('userEditProjectNo').value.trim();
+    const location = document.getElementById('userEditLocation').value.trim();
+    const reason = document.getElementById('userEditReason').value.trim();
 
-  if (startDate > endDate) {
-    showToast('종료일은 시작일보다 빠를 수 없습니다.', 'error');
-    return;
-  }
+    const tripStartDate = (document.getElementById('userEditTripStartDate')?.value || '').trim();
+    const tripEndDate = (document.getElementById('userEditTripEndDate')?.value || '').trim();
 
-  const payload = {
-    changed_by: currentUser.emp_id,
-    category,
-    start_date: startDate,
-    end_date: endDate,
-    project_no: projectNo,
-    location,
-    reason,
-    is_pre_deduct: isPreDeduct,
-    trip_start_date: tripStartDate,
-    trip_end_date: tripEndDate
-  };
-
-  const editSubmitBtn = document.getElementById('editOvertimeForm').querySelector('button[type="submit"]');
-  const restoreEditBtn = setButtonLoading(editSubmitBtn, '수정 저장 중...');
-
-  try {
-    const res = await fetch(`/api/overtimes/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      showToast(data.detail || '수정 실패', 'error');
+    if (startDate > endDate) {
+      showToast('종료일은 시작일보다 빠를 수 없습니다.', 'error');
       return;
     }
-    closeModal('editModal');
-    showToast('특근/휴무 내역이 수정되었습니다.');
-    if (currentMode === 'user') loadUserOvertimes();
-    else loadAdminData();
+
+    // 사용자 모드는 사전차감/보너스 정보를 수정하거나 전송하지 않음
+    const payload = {
+      changed_by: currentUser ? currentUser.emp_id : '',
+      category,
+      start_date: startDate,
+      end_date: endDate,
+      project_no: projectNo,
+      location,
+      reason,
+      trip_start_date: tripStartDate,
+      trip_end_date: tripEndDate
+    };
+
+    const submitBtn = userEditOvertimeForm.querySelector('button[type="submit"]');
+    const restoreBtn = setButtonLoading(submitBtn, '수정 저장 중...');
+
+    try {
+      const res = await fetch(`/api/overtimes/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.detail || '수정 실패', 'error');
+        return;
+      }
+      closeModal('userOvertimeEditModal');
+      showToast('특근/휴무 내역이 수정되었습니다.');
+      loadUserOvertimes();
+    } catch (err) {
+      console.error(err);
+      showToast('수정 중 오류 발생', 'error');
+    } finally {
+      restoreBtn();
+    }
+  });
+}
+
+// =========================================================================
+// 2-B. 관리자 모드: 팀원 특근 내역 수정 (사전차감 및 보너스 부여 토글 지원)
+// =========================================================================
+function setAdminEditPreDeduct(active) {
+  const btn = document.getElementById('adminEditPreDeductToggleBtn');
+  const input = document.getElementById('adminEditIsPreDeduct');
+  if (!btn || !input) return;
+  input.value = active ? '1' : '0';
+  if (active) {
+    btn.textContent = '적용 ON';
+    btn.className = 'btn btn-sm btn-primary';
+    btn.style.background = 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)';
+    btn.style.color = '#fff';
+    btn.style.borderColor = '#0284c7';
+  } else {
+    btn.textContent = 'OFF';
+    btn.className = 'btn btn-sm btn-secondary';
+    btn.style.background = '';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+  }
+}
+
+function setAdminEditBonus(active) {
+  const btn = document.getElementById('adminEditBonusToggleBtn');
+  const input = document.getElementById('adminEditBonusGranted');
+  if (!btn || !input) return;
+  input.value = active ? '1' : '0';
+  if (active) {
+    btn.textContent = '🎁 부여 ON';
+    btn.className = 'btn btn-sm btn-primary';
+    btn.style.background = 'linear-gradient(135deg, #9333ea 0%, #7e22ce 100%)';
+    btn.style.color = '#fff';
+    btn.style.borderColor = '#7e22ce';
+  } else {
+    btn.textContent = '미부여 OFF';
+    btn.className = 'btn btn-sm btn-secondary';
+    btn.style.background = '';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+  }
+}
+
+const adminEditPreDeductToggleBtn = document.getElementById('adminEditPreDeductToggleBtn');
+if (adminEditPreDeductToggleBtn) {
+  adminEditPreDeductToggleBtn.addEventListener('click', () => {
+    const currentVal = document.getElementById('adminEditIsPreDeduct')?.value === '1';
+    setAdminEditPreDeduct(!currentVal);
+  });
+}
+
+const adminEditBonusToggleBtn = document.getElementById('adminEditBonusToggleBtn');
+if (adminEditBonusToggleBtn) {
+  adminEditBonusToggleBtn.addEventListener('click', () => {
+    const currentVal = document.getElementById('adminEditBonusGranted')?.value === '1';
+    setAdminEditBonus(!currentVal);
+  });
+}
+
+const adminEditCategoryEl = document.getElementById('adminEditCategory');
+if (adminEditCategoryEl) {
+  adminEditCategoryEl.addEventListener('change', () => {
+    const tripRow = document.getElementById('adminEditTripDatesRow');
+    if (tripRow) {
+      tripRow.style.display = adminEditCategoryEl.value === '대체휴무' ? 'grid' : 'none';
+    }
+  });
+}
+
+async function openAdminEditModal(itemId) {
+  try {
+    const res = await fetch(`/api/overtimes/${itemId}`);
+    const data = await res.json();
+    if (!res.ok) {
+      showToast('상세 내역 조회 실패', 'error');
+      return;
+    }
+    const item = data.overtime;
+    document.getElementById('adminEditId').value = item.id;
+    document.getElementById('adminEditCategory').value = item.category;
+    document.getElementById('adminEditStartDate').value = item.start_date;
+    document.getElementById('adminEditEndDate').value = item.end_date;
+    document.getElementById('adminEditProjectNo').value = item.project_no || '';
+    document.getElementById('adminEditLocation').value = item.location || '';
+    document.getElementById('adminEditReason').value = item.reason || '';
+
+    // 대체휴무 출장기간 표시 제어
+    const tripRow = document.getElementById('adminEditTripDatesRow');
+    if (tripRow) {
+      tripRow.style.display = item.category === '대체휴무' ? 'grid' : 'none';
+    }
+    const tripStartEl = document.getElementById('adminEditTripStartDate');
+    const tripEndEl = document.getElementById('adminEditTripEndDate');
+    if (tripStartEl) tripStartEl.value = item.trip_start_date || '';
+    if (tripEndEl) tripEndEl.value = item.trip_end_date || '';
+
+    // 사전차감 토글 상태 세팅
+    setAdminEditPreDeduct(item.is_pre_deduct === 1);
+    // 보너스 부여 토글 상태 세팅
+    setAdminEditBonus(item.bonus_granted === 1);
+
+    openModal('adminEditModal');
   } catch (err) {
     console.error(err);
-    showToast('수정 중 오류 발생', 'error');
-  } finally {
-    restoreEditBtn();
+    showToast('통신 오류', 'error');
   }
-});
+}
+
+const adminEditOvertimeForm = document.getElementById('adminEditOvertimeForm');
+if (adminEditOvertimeForm) {
+  adminEditOvertimeForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('adminEditId').value;
+    const category = document.getElementById('adminEditCategory').value;
+    const startDate = document.getElementById('adminEditStartDate').value;
+    const endDate = document.getElementById('adminEditEndDate').value;
+    const projectNo = document.getElementById('adminEditProjectNo').value.trim();
+    const location = document.getElementById('adminEditLocation').value.trim();
+    const reason = document.getElementById('adminEditReason').value.trim();
+
+    const tripStartDate = (document.getElementById('adminEditTripStartDate')?.value || '').trim();
+    const tripEndDate = (document.getElementById('adminEditTripEndDate')?.value || '').trim();
+    const isPreDeduct = document.getElementById('adminEditIsPreDeduct')?.value === '1' ? 1 : 0;
+    const bonusGranted = document.getElementById('adminEditBonusGranted')?.value === '1' ? 1 : 0;
+
+    if (startDate > endDate) {
+      showToast('종료일은 시작일보다 빠를 수 없습니다.', 'error');
+      return;
+    }
+
+    const payload = {
+      changed_by: currentUser ? currentUser.emp_id : '',
+      category,
+      start_date: startDate,
+      end_date: endDate,
+      project_no: projectNo,
+      location,
+      reason,
+      is_pre_deduct: isPreDeduct,
+      bonus_granted: bonusGranted,
+      trip_start_date: tripStartDate,
+      trip_end_date: tripEndDate
+    };
+
+    const submitBtn = adminEditOvertimeForm.querySelector('button[type="submit"]');
+    const restoreBtn = setButtonLoading(submitBtn, '수정 저장 중...');
+
+    try {
+      const res = await fetch(`/api/overtimes/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.detail || '수정 실패', 'error');
+        return;
+      }
+      closeModal('adminEditModal');
+      showToast('특근/휴무 내역이 수정되었습니다.');
+      loadAdminData();
+    } catch (err) {
+      console.error(err);
+      showToast('수정 중 오류 발생', 'error');
+    } finally {
+      restoreBtn();
+    }
+  });
+}
+
+// 통합 라우터 (호환성 유지)
+async function openEditModal(itemId) {
+  if (currentMode === 'admin' || (currentUser && (currentUser.is_admin === 1 || currentUser.is_super === 1))) {
+    return openAdminEditModal(itemId);
+  } else {
+    return openUserOvertimeEditModal(itemId);
+  }
+}
+window.openUserOvertimeEditModal = openUserOvertimeEditModal;
+window.openAdminEditModal = openAdminEditModal;
+window.openEditModal = openEditModal;
 
 async function handleDeleteOvertime(itemId) {
   const isUserAdmin = currentUser && (currentUser.is_admin === 1 || currentUser.is_super === 1);
@@ -2028,7 +2180,7 @@ function showDailyWorkers(dateStr, list) {
       <td>
         <div style="display:flex; gap:0.25rem;">
           <button class="btn btn-secondary btn-sm" onclick="openHistoryModal(${item.id})">이력</button>
-          <button class="btn btn-secondary btn-sm" onclick="openEditModal(${item.id})">수정</button>
+          <button class="btn btn-secondary btn-sm" onclick="openAdminEditModal(${item.id})">수정</button>
           <button class="btn btn-danger btn-sm" onclick="handleDeleteOvertime(${item.id})">삭제</button>
         </div>
       </td>
@@ -2171,7 +2323,7 @@ function renderAdminOvertimeTable() {
       <td>
         <div style="display: flex; gap: 0.3rem;">
           <button class="btn btn-secondary btn-sm" onclick="openHistoryModal(${item.id})">이력</button>
-          <button class="btn btn-secondary btn-sm" onclick="openEditModal(${item.id})">수정</button>
+          <button class="btn btn-secondary btn-sm" onclick="openAdminEditModal(${item.id})">수정</button>
           <button class="btn btn-danger btn-sm" onclick="handleDeleteOvertime(${item.id})">삭제</button>
         </div>
       </td>
@@ -2297,6 +2449,49 @@ if (batchConfirmBtn) {
 const batchUnconfirmBtn = document.getElementById('batchUnconfirmBtn');
 if (batchUnconfirmBtn) {
   batchUnconfirmBtn.addEventListener('click', () => handleBatchConfirm(0));
+}
+
+const batchDeleteBtn = document.getElementById('batchDeleteBtn');
+if (batchDeleteBtn) {
+  batchDeleteBtn.addEventListener('click', handleBatchDelete);
+}
+
+async function handleBatchDelete() {
+  if (selectedOvertimeIds.size === 0) {
+    showToast('삭제할 특근 항목의 체크박스를 선택해주세요.', 'error');
+    return;
+  }
+  if (!confirm(`선택한 ${selectedOvertimeIds.size}건의 특근/휴무 내역을 정말로 일괄 삭제하시겠습니까?\n\n⚠️ 삭제된 데이터는 복구할 수 없으며 변경 이력(Audit Log)에 기록됩니다.`)) return;
+
+  const targetBtn = document.getElementById('batchDeleteBtn');
+  const restoreBtn = setButtonLoading(targetBtn, '일괄 삭제 중...');
+
+  try {
+    const res = await fetch('/api/overtimes/batch-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ids: Array.from(selectedOvertimeIds),
+        admin_emp_id: currentUser ? currentUser.emp_id : ''
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.detail || '일괄 삭제 실패', 'error');
+      return;
+    }
+    showToast(data.message || `${selectedOvertimeIds.size}건 일괄 삭제 완료!`);
+    selectedOvertimeIds.clear();
+    updateSelectedCountText();
+    const selectAllEl = document.getElementById('selectAllCheckbox');
+    if (selectAllEl) selectAllEl.checked = false;
+    await loadAdminData();
+  } catch (err) {
+    console.error(err);
+    showToast('일괄 삭제 중 오류 발생', 'error');
+  } finally {
+    restoreBtn();
+  }
 }
 
 async function handleBatchConfirm(isConfirmed) {
@@ -2666,7 +2861,6 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
         "특근분류": r.category,
         "휴일일수": r.holiday_days, // 순수 숫자
         "대체휴일 사용일": r.sub_holiday_date,
-        "대체휴가 사용일수": r.sub_holiday_used, // 순수 숫자
         "프로젝트 번호": r.project_no,
         "근무 장소": r.location,
         "특근 사유": r.reason,
@@ -2713,11 +2907,11 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
             trip_pre_deduct_count: 0,
             total_days: 0,
             sub_holiday_used: 0,
+            bonus_count: 0,
             records_count: 0
           };
         }
         const u = userMap[empId];
-        u.total_days += days;
         u.records_count += 1;
         u.sub_holiday_used += Number(item.sub_holiday_used || 0);
 
@@ -2725,6 +2919,14 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
         else if (item.category === '법정휴일') u.legal_holiday_days += days;
         else if (item.category === '일반휴일') u.normal_holiday_days += days;
         else if (item.category === '대체휴무' || item.category === '대체휴일') u.sub_holiday_days += days;
+
+        // 요구사항 1-1: 총 특근일수 = 대체근무 + 법정휴일 + 일반휴일 (대체휴무 제외)
+        u.total_days = u.sub_work_days + u.legal_holiday_days + u.normal_holiday_days;
+
+        // 요구사항 1-3: 보너스 건수 집계
+        if (item.bonus_granted === 1) {
+          u.bonus_count += 1;
+        }
 
         if (item.is_pre_deduct === 1) {
           u.pre_deduct_count += 1;
@@ -2756,10 +2958,11 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
           "법정휴일 일수": u.legal_holiday_days,
           "일반휴일 일수": u.normal_holiday_days,
           "대체휴무 일수": totalSub,
-          "사전차감 횟수": u.pre_deduct_count,
-          "사전차감 잔여": preRemain,
           "총 특근일수": u.total_days,
+          "총 사전차감": u.pre_deduct_count,
+          "사전차감 잔여수": preRemain,
           "★ 최종 실특근일": actualOvertime,
+          "보너스 부여 (건)": u.bonus_count,
           "신청건수": u.records_count
         };
       });
@@ -2775,10 +2978,11 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
           "법정휴일 일수": sheet2Rows.reduce((a, b) => a + (b["법정휴일 일수"] || 0), 0),
           "일반휴일 일수": sheet2Rows.reduce((a, b) => a + (b["일반휴일 일수"] || 0), 0),
           "대체휴무 일수": Math.round(sheet2Rows.reduce((a, b) => a + (b["대체휴무 일수"] || 0), 0) * 10) / 10,
-          "사전차감 횟수": sheet2Rows.reduce((a, b) => a + (b["사전차감 횟수"] || 0), 0),
-          "사전차감 잔여": sheet2Rows.reduce((a, b) => a + (b["사전차감 잔여"] || 0), 0),
           "총 특근일수": sheet2Rows.reduce((a, b) => a + (b["총 특근일수"] || 0), 0),
+          "총 사전차감": sheet2Rows.reduce((a, b) => a + (b["총 사전차감"] || 0), 0),
+          "사전차감 잔여수": sheet2Rows.reduce((a, b) => a + (b["사전차감 잔여수"] || 0), 0),
           "★ 최종 실특근일": Math.round(sheet2Rows.reduce((a, b) => a + (b["★ 최종 실특근일"] || 0), 0) * 10) / 10,
+          "보너스 부여 (건)": sheet2Rows.reduce((a, b) => a + (b["보너스 부여 (건)"] || 0), 0),
           "신청건수": sheet2Rows.reduce((a, b) => a + (b["신청건수"] || 0), 0)
         });
       }
