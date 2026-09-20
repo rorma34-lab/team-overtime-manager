@@ -733,7 +733,7 @@ def generate_settlement_excel(
             sub_d,
             leg_d,
             ot_d,
-            int(u.get("sub_holiday_days", 0) or 0),
+            int(u.get("sub_holiday_days", 0) or u.get("sub_holiday_used", 0) or 0),
             calculated_total,
             int(u.get("pre_deduct_count", 0) or 0),
             int(u.get("pre_deduct_remaining", 0) or 0),
@@ -765,20 +765,25 @@ def generate_settlement_excel(
     _write_title(ws2,
                  "부서(소속팀)별 특근 정산 요약표",
                  f"{period_str}  |  팀별 인원수 및 분류별 일수 합산  |  출력일시: {now_str}",
-                 8, s)
+                 10, s)
 
     headers2 = [
         "순번", "소속팀", "소속 인원수", "총 신청일수",
         "제외일수 (대체+법정)", "인정 특근일 (일반휴일)",
-        "대체휴가 사용일수", "★ 팀 최종 실특근일"
+        "대체휴가 사용일수", "★ 팀 최종 실특근일 (일)",
+        "보너스 부여 (건)", "★ 팀 최종 실특근일+보너스 [일]"
     ]
     fills2 = [None, None, None, s["fill_slate"],
-              s["fill_slate"], s["fill_navy"], s["fill_navy"], s["fill_teal"]]
+              s["fill_slate"], s["fill_navy"], s["fill_navy"], s["fill_teal"],
+              s["fill_gold"] if "fill_gold" in s else None, s["fill_teal"]]
     _write_header_row(ws2, 3, headers2, fills2, s)
     ws2.freeze_panes = "A4"
 
     r2 = 4
     for idx, t in enumerate(teams, 1):
+        actual_team_ot = float(t.get("actual_overtime_days", 0.0) or 0.0)
+        team_bonus_cnt = int(t.get("bonus_count", 0) or 0)
+        actual_team_with_b = float(t.get("actual_overtime_with_bonus", actual_team_ot + team_bonus_cnt))
         row_data = [
             idx,
             t.get("team", ""),
@@ -787,19 +792,22 @@ def generate_settlement_excel(
             int(t.get("excluded_days", 0) or 0),
             int(t.get("overtime_days", 0) or 0),
             float(t.get("sub_holiday_used", 0.0) or 0.0),
-            float(t.get("actual_overtime_days", 0.0) or 0.0)
+            actual_team_ot,
+            team_bonus_cnt,
+            actual_team_with_b
         ]
         center_c = {1, 2}
-        right_c  = {3, 4, 5, 6, 7, 8}
-        num_fmt  = {3: "#,##0", 4: "#,##0", 5: "#,##0", 6: "#,##0", 7: "0.0", 8: "0.0"}
-        hl_c = {8}
+        right_c  = {3, 4, 5, 6, 7, 8, 9, 10}
+        num_fmt  = {3: "#,##0", 4: "#,##0", 5: "#,##0", 6: "#,##0", 7: "0.0", 8: "0.0", 9: "#,##0", 10: "0.0"}
+        hl_c = {8, 10}
 
         _write_data_row(ws2, r2, row_data, s, r2 % 2 == 0, center_c, right_c, num_fmt, hl_c)
         r2 += 1
 
     _write_total_row(ws2, r2, f"합계 ({len(teams)}개 팀)", 2,
                      [(3, "#,##0", False), (4, "#,##0", False), (5, "#,##0", False),
-                      (6, "#,##0", False), (7, "0.0", False), (8, "0.0", True)], s)
+                      (6, "#,##0", False), (7, "0.0", False), (8, "0.0", True),
+                      (9, "#,##0", False), (10, "0.0", True)], s)
 
     # 전 시트 열 너비 자동 조정
     for ws in [ws1, ws2]:

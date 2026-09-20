@@ -1519,7 +1519,8 @@ if (adminEditCategoryEl) {
 
 async function openAdminEditModal(itemId) {
   try {
-    const res = await fetch(`/api/overtimes/${itemId}`);
+    const viewerParam = currentUser ? `?viewer_emp_id=${encodeURIComponent(currentUser.emp_id)}` : '';
+    const res = await fetch(`/api/overtimes/${itemId}${viewerParam}`);
     const data = await res.json();
     if (!res.ok) {
       showToast('상세 내역 조회 실패', 'error');
@@ -1661,7 +1662,8 @@ async function handleDeleteOvertime(itemId) {
 
 async function openHistoryModal(itemId) {
   try {
-    const res = await fetch(`/api/overtimes/${itemId}`);
+    const viewerParam = currentUser ? `?viewer_emp_id=${encodeURIComponent(currentUser.emp_id)}` : '';
+    const res = await fetch(`/api/overtimes/${itemId}${viewerParam}`);
     const data = await res.json();
     if (!res.ok) {
       showToast('이력 조회 실패', 'error');
@@ -2767,7 +2769,16 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
 
   // 1. 고품질 다중 시트 openpyxl 백엔드 API 우선 호출 (서버 환경)
   try {
-    const reqBody = selectedOvertimeIds.size > 0 ? { ids: Array.from(selectedOvertimeIds) } : {};
+    const reqBody = {
+      ids: selectedOvertimeIds.size > 0 ? Array.from(selectedOvertimeIds) : undefined,
+      start_date: document.getElementById('filterStartDate')?.value || undefined,
+      end_date: document.getElementById('filterEndDate')?.value || undefined,
+      team: selectedDeptFilter || document.getElementById('filterTeam')?.value || undefined,
+      category: document.getElementById('filterCategory')?.value || undefined,
+      is_confirmed: document.getElementById('filterStatus')?.value !== '' ? parseInt(document.getElementById('filterStatus').value) : undefined,
+      search: document.getElementById('filterSearch')?.value?.trim() || undefined,
+      admin_emp_id: currentUser ? currentUser.emp_id : undefined
+    };
     const res = await fetch('/api/overtimes/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -3036,9 +3047,21 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
 
       const ws2 = XLSX.utils.json_to_sheet(sheet2Rows);
       ws2['!cols'] = [
-        { wch: 6 }, { wch: 12 }, { wch: 10 }, { wch: 14 },
-        { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
-        { wch: 16 }, { wch: 16 }, { wch: 10 }
+        { wch: 6 },  // 순번
+        { wch: 12 }, // 사원번호
+        { wch: 10 }, // 성명
+        { wch: 14 }, // 소속팀
+        { wch: 14 }, // 대체근무 일수
+        { wch: 14 }, // 법정휴일 일수
+        { wch: 14 }, // 일반휴일 일수
+        { wch: 14 }, // 대체휴무 일수
+        { wch: 14 }, // 총 특근일수
+        { wch: 14 }, // 총 사전차감
+        { wch: 16 }, // 사전차감 잔여수
+        { wch: 16 }, // ★ 최종 실특근일
+        { wch: 16 }, // 보너스 부여 (건)
+        { wch: 22 }, // ★ 최종 실특근일+보너스
+        { wch: 10 }  // 신청건수
       ];
       XLSX.utils.book_append_sheet(workbook, ws2, "개인별_휴일합산_정산표");
 

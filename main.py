@@ -1706,6 +1706,8 @@ async def export_settlement(req: Request):
         u["actual_overtime_days"] = max(0.0, round(float(u["overtime_days"] - u["pre_deduct_days"] - (u["sub_holiday_used"] - u["trip_pre_deduct_count"])), 1))
         # 사전차감 잔여수 = 총 사전차감 - 출장기간내 사전차감
         u["pre_deduct_remaining"] = max(0, u["pre_deduct_days"] - u["trip_pre_deduct_count"])
+        # ★ 최종 실특근일+보너스 = 최종 실특근일 + 보너스 건수
+        u["actual_overtime_with_bonus"] = max(0.0, round(float(u["actual_overtime_days"] + u["bonus_count"]), 1))
 
         if t not in team_summary_map:
             team_summary_map[t] = {
@@ -1717,7 +1719,8 @@ async def export_settlement(req: Request):
                 "sub_holiday_used": 0,
                 "pre_deduct_days": 0,
                 "actual_overtime_days": 0,
-                "bonus_count": 0
+                "bonus_count": 0,
+                "actual_overtime_with_bonus": 0.0
             }
         tm = team_summary_map[t]
         tm["members"].add(emp_id)
@@ -1744,6 +1747,8 @@ async def export_settlement(req: Request):
         del t_info["members"]
         # 팀 실특근 = 소속 팀원들의 실제 실특근일 합산
         t_info["actual_overtime_days"] = max(0.0, round(sum(u["actual_overtime_days"] for u in user_summary_map.values() if u["team"] == t_name), 1))
+        t_info["bonus_count"] = sum(u.get("bonus_count", 0) for u in user_summary_map.values() if u["team"] == t_name)
+        t_info["actual_overtime_with_bonus"] = max(0.0, round(sum(u.get("actual_overtime_with_bonus", 0.0) for u in user_summary_map.values() if u["team"] == t_name), 1))
         team_list.append(t_info)
     team_list.sort(key=lambda x: x["team"])
 
