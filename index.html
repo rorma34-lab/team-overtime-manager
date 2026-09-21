@@ -37,7 +37,7 @@
         <div class="brand-logo">⏰</div>
         <div>
           <span class="brand-title">스마트 특근 관리</span>
-          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.45</span>
+          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.46</span>
           <span class="brand-subtitle">Smart Overtime System</span>
         </div>
       </div>
@@ -1161,25 +1161,40 @@
       </div>
       <div class="modal-body" style="max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1.25rem;">
         
-        <!-- v1.45 (Latest) -->
+        <!-- v1.46 (Latest) -->
         <div style="background: var(--bg-card); border: 2px solid #0d9488; padding: 1.1rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
           <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-            <span style="background: #0d9488; color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.45</span>
+            <span style="background: #0d9488; color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.46</span>
             <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-main);">최신 정식 릴리즈 (Latest)</span>
             <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-21</span>
           </div>
           <div style="font-weight: 800; color: #0d9488; margin-bottom: 0.5rem; font-size: 0.88rem;">
-            🎯 v1.45 승인/확정 완전 독립 운영, 관리자 확정/검토 원클릭 제어 & 모달 직접 관리, Object 오류 해결
+            🖥️ v1.46 와이드 레이아웃, 검토완료 후 확정 잠금, 캘린더 클릭 상세 패널 오류 수정
           </div>
           <ul style="margin-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.84rem; line-height: 1.6; color: var(--text-main);">
-            <li><b>승인과 확정의 완전한 독립 분리</b>: 특근 신청 후 관리자 승인이 없어도 사원/관리자가 실특근 완료 후 즉시 [🎯 특근완료 확정] 및 [🎯 확정취소] 가능 (승인과 확정 개별 독립 배지 동시 표시)</li>
-            <li><b>관리자 모드 확정/검토 종합 관리 신설</b>: 관리자 테이블 목록 및 캘린더 일자별 상세 패널에서 승인/확정/검토 각각의 원클릭 처리 및 취소 버튼 세트 완비</li>
-            <li><b>관리자 특근 수정 모달(`adminEditModal`) 3대 상태 직접 제어</b>: 승인, 특근확정, 검토완료 3대 플래그를 관리자가 원하는 대로 직접 토글 변경 및 감사 로그 안전 보존</li>
-            <li><b>팝업 에러 방어 및 한글 메시지 안내 강화</b>: 팝업 확인 시 발생하던 `[object Object]` 문자열 오류 완전 차단 및 직관적인 한글 에러/안내 토스트 제공</li>
-            <li><b>사용자 및 관리자 매뉴얼 v1.45 전면 개정</b>: 승인/확정 독립 운영 및 관리자 개별 상태 제어 가이드 최신화 및 루트 자동 동기화</li>
+            <li><b>와이드 모니터 레이아웃 최적화</b>: .nav-container 및 .main-wrapper를 1560px → 1680px(1600px+) → 1820px(1920px+)로 단계 확장하여 넓은 화면에서 여백 없이 시원한 UI 구성</li>
+            <li><b>검토완료 후 확정 잠금(Lock)</b>: 관리자가 '검토완료'를 누른 건은 확정/확정취소 버튼이 비활성화되며, 변경하려면 '검토취소' 후 수정 가능 (프론트·백엔드 이중 방어)</li>
+            <li><b>캘린더 날짜 클릭 시 하단 패널 미표시 오류 수정</b>: showDailyWorkers()에서 isFin/isRev 변수 누락(ReferenceError) 버그 해결 및 부드러운 스크롤 이동 추가</li>
+            <li><b>사용자 및 관리자 매뉴얼 v1.46 전면 개정</b>: 와이드 레이아웃·확정잠금·캘린더 수정 내용 반영 및 3중 경로 PPTX 자동 동기화</li>
           </ul>
         </div>
 
+        <!-- v1.45 -->
+        <div style="background: var(--bg-subtle); border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-md);">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+            <span style="background: var(--text-muted); color: #fff; font-size: 0.8rem; font-weight: 700; padding: 2px 10px; border-radius: 9999px;">v1.45</span>
+            <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-main);">정식 릴리즈</span>
+            <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-21</span>
+          </div>
+          <div style="font-weight: 800; color: var(--text-muted); margin-bottom: 0.5rem; font-size: 0.88rem;">
+            🎯 v1.45 승인/확정 완전 독립 운영, 관리자 확정/검토 원클릭 제어 &amp; 모달 직접 관리, Object 오류 해결
+          </div>
+          <ul style="margin-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.84rem; line-height: 1.6; color: var(--text-main);">
+            <li><b>승인과 확정의 완전한 독립 분리</b>: 특근 신청 후 관리자 승인이 없어도 사원/관리자가 실특근 완료 후 즉시 [🎯 특근완료 확정] 및 [🎯 확정취소] 가능</li>
+            <li><b>관리자 모드 확정/검토 종합 관리 신설</b>: 관리자 테이블 목록 및 캘린더 일자별 상세 패널에서 승인/확정/검토 각각의 원클릭 처리 및 취소 버튼 세트 완비</li>
+            <li><b>팝업 에러 방어 및 한글 메시지 안내 강화</b>: 팝업 확인 시 발생하던 [object Object] 오류 완전 차단</li>
+          </ul>
+        </div>
         <!-- v1.44 -->
         <div style="background: var(--bg-subtle); border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-md);">
           <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem;">

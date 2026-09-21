@@ -2292,6 +2292,7 @@ function showDailyWorkers(dateStr, list) {
   title.textContent = `📅 ${dateStr} 특근 작업자 상세 현황`;
   countText.textContent = `특근 ${list.length}명 ${subHolidayUsers.length > 0 ? `| 대체휴일 ${subHolidayUsers.length}명` : ''}`;
   tbody.innerHTML = '';
+  setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
 
   if (list.length === 0) {
     tbody.innerHTML = `<tr><td colspan="12" style="text-align:center; padding:1.5rem; color:var(--text-muted);">${dateStr}에 신청된 특근자가 없습니다.</td></tr>`;
@@ -2301,6 +2302,8 @@ function showDailyWorkers(dateStr, list) {
   list.forEach(item => {
     const tr = document.createElement('tr');
     const isConf = item.is_confirmed === 1;
+    const isFin  = item.is_finalized === 1;
+    const isRev  = item.is_reviewed  === 1;
 
     tr.innerHTML = `
       <td>
@@ -2341,8 +2344,8 @@ function showDailyWorkers(dateStr, list) {
               ? `<button class="btn btn-success btn-xs" onclick="handleDirectConfirm(${item.id})" title="승인" style="padding: 2px 6px; font-size: 0.72rem;">✓ 승인</button>` 
               : `<button class="btn btn-secondary btn-xs" onclick="handleDirectCancelConfirm(${item.id})" title="승인 취소" style="padding: 2px 6px; font-size: 0.72rem; color:#ef4444; border-color:#fca5a5;">✕ 취소</button>`}
             ${!isFin 
-              ? `<button class="btn btn-finalize btn-xs" onclick="handleFinalizeOvertime(${item.id}, 1)" title="확정" style="padding: 2px 6px; font-size: 0.72rem;">🎯 확정</button>` 
-              : `<button class="btn btn-secondary btn-xs" onclick="handleFinalizeOvertime(${item.id}, 0)" title="확정 취소" style="padding: 2px 6px; font-size: 0.72rem; color:#b45309; border-color:#fde68a;">✕ 확정취소</button>`}
+              ? `<button class="btn btn-finalize btn-xs" onclick="handleFinalizeOvertime(${item.id}, 1)" title="확정" style="padding: 2px 6px; font-size: 0.72rem;" ${isRev ? 'disabled title="검토완료 상태: 확정 변경 불가"' : ''}>🎯 확정</button>` 
+              : `<button class="btn btn-secondary btn-xs" onclick="handleFinalizeOvertime(${item.id}, 0)" title="확정 취소" style="padding: 2px 6px; font-size: 0.72rem; color:#b45309; border-color:#fde68a;" ${isRev ? 'disabled title="검토완료 상태: 확정 변경 불가 (먼저 검토취소 필요)"' : ''}>✕ 확정취소</button>`}
           </div>
           <div>
             ${!isRev 
@@ -2351,6 +2354,7 @@ function showDailyWorkers(dateStr, list) {
           </div>
         </div>
       </td>
+
       <td>
         <div style="display:flex; gap:0.25rem;">
           <button class="btn btn-secondary btn-sm" onclick="openHistoryModal(${item.id})">이력</button>
@@ -2473,8 +2477,8 @@ function renderAdminOvertimeTable() {
             ? `<button class="btn btn-success btn-xs" onclick="handleDirectConfirm(${item.id})" title="특근 신청을 승인합니다" style="padding: 2px 7px; font-size: 0.72rem;">✓ 승인</button>` 
             : `<button class="btn btn-secondary btn-xs" onclick="handleDirectCancelConfirm(${item.id})" title="승인을 취소합니다" style="padding: 2px 6px; font-size: 0.72rem; color:#ef4444; border-color:#fca5a5;">✕ 취소</button>`}
           ${!isFin 
-            ? `<button class="btn btn-finalize btn-xs" onclick="handleFinalizeOvertime(${item.id}, 1)" title="실제 특근 완료 확정을 기록합니다" style="padding: 2px 7px; font-size: 0.72rem;">🎯 확정</button>` 
-            : `<button class="btn btn-secondary btn-xs" onclick="handleFinalizeOvertime(${item.id}, 0)" title="특근확정을 취소합니다" style="padding: 2px 6px; font-size: 0.72rem; color:#b45309; border-color:#fde68a;">✕ 확정취소</button>`}
+            ? `<button class="btn btn-finalize btn-xs" onclick="handleFinalizeOvertime(${item.id}, 1)" title="실제 특근 완료 확정을 기록합니다" style="padding: 2px 7px; font-size: 0.72rem;" ${isRev ? 'disabled title="검토완료 상태: 확정 변경 불가"' : ''}>🎯 확정</button>` 
+            : `<button class="btn btn-secondary btn-xs" onclick="handleFinalizeOvertime(${item.id}, 0)" title="특근확정을 취소합니다" style="padding: 2px 6px; font-size: 0.72rem; color:#b45309; border-color:#fde68a;" ${isRev ? 'disabled title="검토완료 상태: 확정 변경 불가 (먼저 검토취소 필요)"' : ''}>✕ 확정취소</button>`}
         </div>
         <div>
           ${!isRev 

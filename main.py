@@ -53,7 +53,7 @@ if not EXTERNAL_URL_FILE.exists():
     except Exception:
         pass
 
-app = FastAPI(title="Team Overtime Manager", version="v1.45")
+app = FastAPI(title="Team Overtime Manager", version="v1.46")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -1559,10 +1559,10 @@ def finalize_overtime(item_id: int, req: OvertimeFinalizeRequest):
             conn.close()
             raise HTTPException(status_code=403, detail="팀관리자는 본인 소속팀의 특근만 확정할 수 있습니다.")
 
-    # 이미 관리자 검토완료된 건은 사원이 임의로 확정 취소 불가
-    if req.is_finalized == 0 and prev_data.get("is_reviewed") == 1 and not is_admin:
+    # 검토완료(is_reviewed=1)된 건은 누구도 확정 상태를 변경할 수 없음 (먼저 검토취소 필요)
+    if prev_data.get("is_reviewed") == 1:
         conn.close()
-        raise HTTPException(status_code=400, detail="이미 관리자 검토완료된 특근은 관리자만 취소할 수 있습니다.")
+        raise HTTPException(status_code=400, detail="검토완료된 특근은 확정 상태를 변경할 수 없습니다. 먼저 '검토취소'를 진행하세요.")
 
     caller_name = caller["name"] if caller else actor_id
 
@@ -1629,14 +1629,16 @@ def batch_finalize_overtimes(payload: OvertimeBatchFinalizeRequest):
             if ot_dict["team"] != caller.get("team"):
                 continue
 
+        # 검토완료된 건은 확정 상태 변경 불가 (일괄 처리 시 skip)
+        if ot_dict.get("is_reviewed") == 1:
+            continue
+
         if is_finalized == 1:
             cursor.execute("""
             UPDATE overtimes SET is_finalized = 1, finalized_by = ?, finalized_at = ?, updated_at = ?
             WHERE id = ?
             """, (f"{caller_name}({actor_id})", now_str, now_str, itm_id))
         else:
-            if ot_dict.get("is_reviewed") == 1 and not is_admin:
-                continue
             cursor.execute("""
             UPDATE overtimes SET is_finalized = 0, finalized_by = NULL, finalized_at = NULL, updated_at = ?
             WHERE id = ?
