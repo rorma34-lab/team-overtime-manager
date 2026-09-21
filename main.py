@@ -30,7 +30,12 @@ from schemas import (
     SuggestionCreateRequest, SuggestionReplyRequest
 )
 from urllib.parse import quote
-from exporter import generate_overtime_excel, generate_settlement_excel
+from exporter import (
+    generate_overtime_excel,
+    generate_settlement_excel,
+    aggregate_user_holidays,
+    aggregate_team_holidays
+)
 from generate_manual import create_manual, PPTX_PATH, USER_PPTX_PATH, ADMIN_PPTX_PATH
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -1136,168 +1141,29 @@ def get_overtime_summary(
     rows = [dict(r) for r in cursor.fetchall()]
     conn.close()
 
-    # 0. 대체휴무 등록 건들에서 사원별 출장기간 수집
-    user_trips = {}
-    for r in rows:
-        cat_raw = (r.get("category") or "").strip()
-        t_s = (r.get("trip_start_date") or "").strip()
-        t_e = (r.get("trip_end_date") or "").strip()
-        e_id = r.get("emp_id")
-        if cat_raw in ["대체휴무", "대체휴일"] and t_s and t_e and e_id:
-            if e_id not in user_trips:
-                user_trips[e_id] = []
-            user_trips[e_id].append((t_s, t_e))
+    # 직급 정보 조회
+    user_positions = {}
+    if rows:
+        p_conn = get_db_connection()
+        p_cur = p_conn.cursor()
+        p_cur.execute("SELECT emp_id, position FROM users")
+        for p in p_cur.fetchall():
+            user_positions[p["emp_id"]] = p["position"]
+        p_conn.close()
 
-    user_summary = {}
-    team_summary = {}
+    user_list = aggregate_user_holidays(rows, user_positions)
+    team_list = aggregate_team_holidays(user_list)
 
-    for r in rows:
-        emp_id = r["emp_id"]
-        t = r["team"]
-        cat = r["category"]
+    # 이전 버전 호환성을 위한 키 매핑
+    for u in user_list:
+        u["overtime_days"] = u["normal_holiday_days"]
+        u["excluded_sub_days"] = u["sub_work_days"]
+        u["excluded_legal_days"] = u["legal_holiday_days"]
+        u["pre_deduct_days"] = u["pre_deduct_count"]
 
-        try:
-            d1 = datetime.strptime(r["start_date"], "%Y-%m-%d")
-            d2 = datetime.strptime(r["end_date"], "%Y-%m-%d")
-            days = max(1, (d2 - d1).days + 1)
-        except Exception:
-            days = 1
-
-        sub_used = float(r.get("sub_holiday_used") or 0)
-        is_pre = int(r.get("is_pre_deduct") or 0)
-
-        if emp_id not in user_summary:
-            user_summary[emp_id] = {
-                "emp_id": emp_id,
-                "name": r["user_name"],
-                "team": t,
-                "total_days": 0,
-                "excluded_sub_days": 0,
-                "excluded_legal_days": 0,
-                "overtime_days": 0,
-                "sub_holiday_used": 0,
-                "pre_deduct_days": 0,
-                "trip_pre_deduct_count": 0,
-                "pre_deduct_remaining": 0,
-                "actual_overtime_days": 0,
-                "bonus_count": 0,
-                "applied_days": 0,
-                "approved_days": 0,
-                "finalized_days": 0,
-                "reviewed_days": 0,
-                "records_count": 0
-            }
-
-        u = user_summary[emp_id]
-        u["records_count"] += 1
-        u["sub_holiday_used"] += sub_used
-
-        if cat == "대체근무":
-            u["excluded_sub_days"] += days
-        elif cat == "법정휴일":
-            u["excluded_legal_days"] += days
-        elif cat == "일반휴일":
-            u["overtime_days"] += days
-        elif cat in ["대체휴무", "대체휴일"]:
-            u["sub_holiday_used"] += days
-
-        # v1.44: 4단계 진행상태별 일수 집계
-        is_conf = bool(r.get("is_confirmed", 0))
-        is_fin = bool(r.get("is_finalized", 0))
-        is_rev = bool(r.get("is_reviewed", 0))
-
-        if cat in ["일반휴일", "법정휴일", "대체근무"]:
-            if is_rev:
-                u["reviewed_days"] += days
-            elif is_fin:
-                u["finalized_days"] += days
-            elif is_conf:
-                u["approved_days"] += days
-            else:
-                u["applied_days"] += days
-
-        # 요구사항 1-1: 총 특근일수 = 대체근무 + 법정휴일 + 일반휴일 (대체휴무 제외)
-        u["total_days"] = int(u["excluded_sub_days"] + u["excluded_legal_days"] + u["overtime_days"])
-
-        # 요구사항 1-3: 보너스 개수 집계
-        if int(r.get("bonus_granted") or 0) == 1:
-            u["bonus_count"] += 1
-
-        if is_pre == 1:
-            u["pre_deduct_days"] += days
-            # 출장기간 내 포함된 사전차감인지 확인
-            s_d = r["start_date"]
-            e_d = r["end_date"]
-            in_trip = False
-            for ts, te in user_trips.get(emp_id, []):
-                if not (e_d < ts or s_d > te):
-                    in_trip = True
-                    break
-            if in_trip:
-                u["trip_pre_deduct_count"] += days
-
-        # 최종 실특근 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무시 작성한 출장기간 이내의 사전차감)
-        u["actual_overtime_days"] = max(0.0, round(float(u["overtime_days"] - u["pre_deduct_days"] - (u["sub_holiday_used"] - u["trip_pre_deduct_count"])), 1))
-        # 사전차감 잔여수 = 총 사전차감 - 출장기간내 사전차감
-        u["pre_deduct_remaining"] = max(0, u["pre_deduct_days"] - u["trip_pre_deduct_count"])
-
-        if t not in team_summary:
-            team_summary[t] = {
-                "team": t,
-                "members": set(),
-                "total_days": 0,
-                "excluded_days": 0,
-                "overtime_days": 0,
-                "sub_holiday_used": 0,
-                "pre_deduct_days": 0,
-                "actual_overtime_days": 0,
-                "bonus_count": 0,
-                "applied_days": 0,
-                "approved_days": 0,
-                "finalized_days": 0,
-                "reviewed_days": 0
-            }
-        tm = team_summary[t]
-        tm["members"].add(emp_id)
-        if cat in ["대체근무", "법정휴일"]:
-            tm["excluded_days"] += days
-        elif cat == "일반휴일":
-            tm["overtime_days"] += days
-        elif cat in ["대체휴무", "대체휴일"]:
-            tm["sub_holiday_used"] += days
-
-        if cat in ["일반휴일", "법정휴일", "대체근무"]:
-            if is_rev:
-                tm["reviewed_days"] += days
-            elif is_fin:
-                tm["finalized_days"] += days
-            elif is_conf:
-                tm["approved_days"] += days
-            else:
-                tm["applied_days"] += days
-
-        tm["total_days"] = int(tm["excluded_days"] + tm["overtime_days"])
-        if int(r.get("bonus_granted") or 0) == 1:
-            tm["bonus_count"] += 1
-        elif cat in ["대체휴무", "대체휴일"]:
-            tm["sub_holiday_used"] += days
-
-        if is_pre == 1:
-            tm["pre_deduct_days"] += days
-
-        tm["sub_holiday_used"] += sub_used
-
-    team_list = []
-    for t_name, t_info in team_summary.items():
-        t_info["member_count"] = len(t_info["members"])
-        del t_info["members"]
-        # 팀 실특근 = 소속 팀원들의 실제 실특근일 합산
-        t_info["actual_overtime_days"] = max(0.0, round(sum(u["actual_overtime_days"] for u in user_summary.values() if u["team"] == t_name), 1))
-        team_list.append(t_info)
-
-    user_list = list(user_summary.values())
-    user_list.sort(key=lambda x: (x["team"], x["name"]))
-    team_list.sort(key=lambda x: x["team"])
+    for tm in team_list:
+        tm["excluded_days"] = tm["sub_work_days"] + tm["legal_holiday_days"]
+        tm["overtime_days"] = tm["normal_holiday_days"]
 
     return {
         "user_summary": user_list,
@@ -2073,151 +1939,29 @@ async def export_settlement(req: Request):
     if not rows:
         raise HTTPException(status_code=400, detail="내보낼 정산 내역 데이터가 없습니다.")
 
-    # get_overtime_summary 와 동일한 집계 로직으로 user_summary / team_summary 생성
-    user_trips = {}
-    for r in rows:
-        cat_raw = (r.get("category") or "").strip()
-        t_s = (r.get("trip_start_date") or "").strip()
-        t_e = (r.get("trip_end_date") or "").strip()
-        e_id = r.get("emp_id")
-        if cat_raw in ["대체휴무", "대체휴일"] and t_s and t_e and e_id:
-            if e_id not in user_trips:
-                user_trips[e_id] = []
-            user_trips[e_id].append((t_s, t_e))
+    # 직급 정보 조회
+    user_positions = {}
+    if rows:
+        p_conn = get_db_connection()
+        p_cur = p_conn.cursor()
+        p_cur.execute("SELECT emp_id, position FROM users")
+        for p in p_cur.fetchall():
+            user_positions[p["emp_id"]] = p["position"]
+        p_conn.close()
 
-    user_summary_map = {}
-    team_summary_map = {}
+    user_list = aggregate_user_holidays(rows, user_positions)
+    team_list = aggregate_team_holidays(user_list)
 
-    for r in rows:
-        emp_id = r["emp_id"]
-        t = r["team"]
-        cat = r["category"]
-        try:
-            d1 = datetime.strptime(r["start_date"], "%Y-%m-%d")
-            d2 = datetime.strptime(r["end_date"], "%Y-%m-%d")
-            days = max(1, (d2 - d1).days + 1)
-        except Exception:
-            days = 1
-        sub_used = float(r.get("sub_holiday_used") or 0)
-        is_pre = int(r.get("is_pre_deduct") or 0)
+    # 이전 버전 호환성을 위한 키 매핑
+    for u in user_list:
+        u["overtime_days"] = u["normal_holiday_days"]
+        u["excluded_sub_days"] = u["sub_work_days"]
+        u["excluded_legal_days"] = u["legal_holiday_days"]
+        u["pre_deduct_days"] = u["pre_deduct_count"]
 
-        if emp_id not in user_summary_map:
-            user_summary_map[emp_id] = {
-                "emp_id": emp_id,
-                "name": r["user_name"],
-                "team": t,
-                "total_days": 0,
-                "excluded_sub_days": 0,
-                "excluded_legal_days": 0,
-                "overtime_days": 0,
-                "sub_holiday_used": 0,
-                "pre_deduct_days": 0,
-                "trip_pre_deduct_count": 0,
-                "pre_deduct_remaining": 0,
-                "actual_overtime_days": 0,
-                "bonus_count": 0,
-                "records_count": 0,
-                "applied_days": 0,
-                "approved_days": 0,
-                "finalized_days": 0,
-                "reviewed_days": 0
-            }
-        u = user_summary_map[emp_id]
-        u["records_count"] += 1
-        u["sub_holiday_used"] += sub_used
-
-        is_conf = int(r.get("is_confirmed") or 0)
-        is_fin = int(r.get("is_finalized") or 0)
-        is_rev = int(r.get("is_reviewed") or 0)
-        if is_rev == 1:
-            u["reviewed_days"] += days
-        elif is_fin == 1:
-            u["finalized_days"] += days
-        elif is_conf == 1:
-            u["approved_days"] += days
-        else:
-            u["applied_days"] += days
-
-        if cat == "대체근무":
-            u["excluded_sub_days"] += days
-        elif cat == "법정휴일":
-            u["excluded_legal_days"] += days
-        elif cat == "일반휴일":
-            u["overtime_days"] += days
-        elif cat in ["대체휴무", "대체휴일"]:
-            u["sub_holiday_used"] += days
-
-        # 총 특근일수 = 대체근무 + 법정휴일 + 일반휴일 (대체휴무 제외)
-        u["total_days"] = int(u["excluded_sub_days"] + u["excluded_legal_days"] + u["overtime_days"])
-
-        if int(r.get("bonus_granted") or 0) == 1:
-            u["bonus_count"] += 1
-
-        if is_pre == 1:
-            u["pre_deduct_days"] += days
-            s_d = r["start_date"]
-            e_d = r["end_date"]
-            in_trip = False
-            for ts, te in user_trips.get(emp_id, []):
-                if not (e_d < ts or s_d > te):
-                    in_trip = True
-                    break
-            if in_trip:
-                u["trip_pre_deduct_count"] += days
-
-        # 최종 실특근 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무시 작성한 출장기간 이내의 사전차감)
-        u["actual_overtime_days"] = max(0.0, round(float(u["overtime_days"] - u["pre_deduct_days"] - (u["sub_holiday_used"] - u["trip_pre_deduct_count"])), 1))
-        # 사전차감 잔여수 = 총 사전차감 - 출장기간내 사전차감
-        u["pre_deduct_remaining"] = max(0, u["pre_deduct_days"] - u["trip_pre_deduct_count"])
-        # ★ 최종 실특근일+보너스 = 최종 실특근일 + 보너스 건수
-        u["actual_overtime_with_bonus"] = max(0.0, round(float(u["actual_overtime_days"] + u["bonus_count"]), 1))
-
-        if t not in team_summary_map:
-            team_summary_map[t] = {
-                "team": t,
-                "members": set(),
-                "total_days": 0,
-                "excluded_days": 0,
-                "overtime_days": 0,
-                "sub_holiday_used": 0,
-                "pre_deduct_days": 0,
-                "actual_overtime_days": 0,
-                "bonus_count": 0,
-                "actual_overtime_with_bonus": 0.0
-            }
-        tm = team_summary_map[t]
-        tm["members"].add(emp_id)
-        if cat in ["대체근무", "법정휴일"]:
-            tm["excluded_days"] += days
-        elif cat == "일반휴일":
-            tm["overtime_days"] += days
-        elif cat in ["대체휴무", "대체휴일"]:
-            tm["sub_holiday_used"] += days
-
-        tm["total_days"] = int(tm["excluded_days"] + tm["overtime_days"])
-        if int(r.get("bonus_granted") or 0) == 1:
-            tm["bonus_count"] += 1
-
-        if is_pre == 1:
-            tm["pre_deduct_days"] += days
-
-        tm["sub_holiday_used"] += sub_used
-
-    user_list = sorted(user_summary_map.values(), key=lambda x: (x["team"], x["name"]))
-    team_list = []
-    for t_name, t_info in team_summary_map.items():
-        t_info["member_count"] = len(t_info["members"])
-        del t_info["members"]
-        # 팀 실특근 = 소속 팀원들의 실제 실특근일 합산
-        t_info["actual_overtime_days"] = max(0.0, round(sum(u["actual_overtime_days"] for u in user_summary_map.values() if u["team"] == t_name), 1))
-        t_info["bonus_count"] = sum(u.get("bonus_count", 0) for u in user_summary_map.values() if u["team"] == t_name)
-        t_info["actual_overtime_with_bonus"] = max(0.0, round(sum(u.get("actual_overtime_with_bonus", 0.0) for u in user_summary_map.values() if u["team"] == t_name), 1))
-        t_info["applied_days"] = sum(u.get("applied_days", 0) for u in user_summary_map.values() if u["team"] == t_name)
-        t_info["approved_days"] = sum(u.get("approved_days", 0) for u in user_summary_map.values() if u["team"] == t_name)
-        t_info["finalized_days"] = sum(u.get("finalized_days", 0) for u in user_summary_map.values() if u["team"] == t_name)
-        t_info["reviewed_days"] = sum(u.get("reviewed_days", 0) for u in user_summary_map.values() if u["team"] == t_name)
-        team_list.append(t_info)
-    team_list.sort(key=lambda x: x["team"])
+    for tm in team_list:
+        tm["excluded_days"] = tm["sub_work_days"] + tm["legal_holiday_days"]
+        tm["overtime_days"] = tm["normal_holiday_days"]
 
     summary_data = {
         "user_summary": user_list,

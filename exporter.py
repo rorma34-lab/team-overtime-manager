@@ -43,7 +43,8 @@ def _make_styles():
         "fill_alt":     PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid"),
         "fill_total":   PatternFill(start_color="E2E8F0", end_color="E2E8F0", fill_type="solid"),
         "fill_conf":    PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid"),
-        "fill_pend":    PatternFill(start_color="FEF9C3", end_color="FEF9C3", fill_type="solid"),
+        "fill_pend":    PatternFill(start_color="D97706", end_color="D97706", fill_type="solid"),  # 신청단계 헤더: 호박/주황(흰색 글씨와 고대비 보장)
+        "fill_header_apply": PatternFill(start_color="D97706", end_color="D97706", fill_type="solid"),
         "fill_hl":      PatternFill(start_color="CCFBF1", end_color="CCFBF1", fill_type="solid"),
         "fill_gold":    PatternFill(start_color="D97706", end_color="D97706", fill_type="solid"),
         "fill_none":    PatternFill(fill_type=None),
@@ -260,7 +261,7 @@ def expand_records_by_holiday_date(records: list) -> list:
 
 
 def aggregate_user_holidays(records: list, user_positions: dict = None) -> list:
-    """개인별 휴일수(대체근무, 법정휴일, 일반휴일, 대체휴무, 사전차감, 최종실특근) 및 4단계 구분 집계"""
+    """개인별 휴일수 및 단계별(신청,승인,확정,검토완료) 실특근일+보너스 세부 합산 집계"""
     user_positions = user_positions or {}
     user_map = {}
     user_trips = {}  # emp_id -> [(start, end)]
@@ -298,6 +299,7 @@ def aggregate_user_holidays(records: list, user_positions: dict = None) -> list:
         is_conf = bool(r.get("is_confirmed", 0))
         is_fin = bool(r.get("is_finalized", 0))
         is_rev = bool(r.get("is_reviewed", 0))
+        is_bonus = 1 if int(r.get("bonus_granted", 0) or 0) == 1 else 0
 
         if emp_id not in user_map:
             user_map[emp_id] = {
@@ -316,11 +318,27 @@ def aggregate_user_holidays(records: list, user_positions: dict = None) -> list:
                 "actual_overtime_days": 0.0,
                 "bonus_count": 0,
                 "records_count": 0,
-                # 4단계별 특근일수
+                # 4단계별 총 특근일수 (대체/법정/일반 포함)
                 "applied_days": 0,
                 "approved_days": 0,
                 "finalized_days": 0,
                 "reviewed_days": 0,
+                # 4단계별 일반특근일수 (실특근 대상)
+                "applied_ot_days": 0,
+                "approved_ot_days": 0,
+                "finalized_ot_days": 0,
+                "reviewed_ot_days": 0,
+                # 4단계별 보너스 건수
+                "applied_bonus": 0,
+                "approved_bonus": 0,
+                "finalized_bonus": 0,
+                "reviewed_bonus": 0,
+                # 4단계별 최종 실특근일+보너스 [일]
+                "applied_final_with_bonus": 0.0,
+                "approved_final_with_bonus": 0.0,
+                "finalized_final_with_bonus": 0.0,
+                "reviewed_final_with_bonus": 0.0,
+                "actual_overtime_with_bonus": 0.0
             }
 
         u = user_map[emp_id]
@@ -336,21 +354,37 @@ def aggregate_user_holidays(records: list, user_positions: dict = None) -> list:
         else:  # 일반휴일 + 기타
             u["normal_holiday_days"] += days
 
-        # 4단계 일수 누적 (검토완료 > 확정 > 승인 > 신청)
+        # 4단계 일수 및 일반특근/보너스 누적 (검토완료 > 확정 > 승인 > 신청)
         if is_rev:
             u["reviewed_days"] += days
+            if cat == "일반휴일":
+                u["reviewed_ot_days"] += days
+            if is_bonus:
+                u["reviewed_bonus"] += 1
         elif is_fin:
             u["finalized_days"] += days
+            if cat == "일반휴일":
+                u["finalized_ot_days"] += days
+            if is_bonus:
+                u["finalized_bonus"] += 1
         elif is_conf:
             u["approved_days"] += days
+            if cat == "일반휴일":
+                u["approved_ot_days"] += days
+            if is_bonus:
+                u["approved_bonus"] += 1
         else:
             u["applied_days"] += days
+            if cat == "일반휴일":
+                u["applied_ot_days"] += days
+            if is_bonus:
+                u["applied_bonus"] += 1
 
         # 총 특근일수 = 대체근무 + 법정휴일 + 일반휴일 (대체휴무 제외)
         u["total_days"] = int(u["sub_work_days"] + u["legal_holiday_days"] + u["normal_holiday_days"])
 
-        # 보너스 개수 집계
-        if int(r.get("bonus_granted", 0) or 0) == 1:
+        # 총 보너스 개수 집계
+        if is_bonus:
             u["bonus_count"] += 1
 
         if is_pre:
@@ -361,12 +395,43 @@ def aggregate_user_holidays(records: list, user_positions: dict = None) -> list:
                     u["trip_pre_deduct_count"] += 1
                     break
 
-        # 최종 실특근일 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무시 작성한 출장기간 이내의 사전차감)
-        u["actual_overtime_days"] = max(0.0, round(float(u["normal_holiday_days"] - u["pre_deduct_count"] - (u["sub_holiday_days"] - u["trip_pre_deduct_count"])), 1))
-        # 사전차감 잔여수 = 총사전차감수 - 출장기간내사전차감수
+    # 2차: 개인별 차감 분배 및 단계별 최종 실특근일+보너스 확정 계산
+    for u in user_map.values():
         u["pre_deduct_remaining"] = max(0, u["pre_deduct_count"] - u["trip_pre_deduct_count"])
-        # 최종 실특근일+보너스 = 최종 실특근일 + 보너스 건수
+        net_deduct = float(u["pre_deduct_count"] + max(0.0, float(u["sub_holiday_days"] - u["trip_pre_deduct_count"])))
+        u["actual_overtime_days"] = max(0.0, round(float(u["normal_holiday_days"] - net_deduct), 1))
         u["actual_overtime_with_bonus"] = max(0.0, round(float(u["actual_overtime_days"] + u["bonus_count"]), 1))
+
+        # 차감의 단계별 배분 (우선순위: 검토완료 -> 확정 -> 승인 -> 신청 순)
+        rem_ded = max(0.0, net_deduct)
+
+        d_rev = min(float(u["reviewed_ot_days"]), rem_ded)
+        rev_net = max(0.0, float(u["reviewed_ot_days"]) - d_rev)
+        rem_ded = max(0.0, rem_ded - d_rev)
+
+        d_fin = min(float(u["finalized_ot_days"]), rem_ded)
+        fin_net = max(0.0, float(u["finalized_ot_days"]) - d_fin)
+        rem_ded = max(0.0, rem_ded - d_fin)
+
+        d_appr = min(float(u["approved_ot_days"]), rem_ded)
+        appr_net = max(0.0, float(u["approved_ot_days"]) - d_appr)
+        rem_ded = max(0.0, rem_ded - d_appr)
+
+        d_apply = min(float(u["applied_ot_days"]), rem_ded)
+        apply_net = max(0.0, float(u["applied_ot_days"]) - d_apply)
+        rem_ded = max(0.0, rem_ded - d_apply)
+
+        # 각 단계별 최종 실특근일+보너스 [일]
+        u["applied_final_with_bonus"] = max(0.0, round(apply_net + u["applied_bonus"], 1))
+        u["approved_final_with_bonus"] = max(0.0, round(appr_net + u["approved_bonus"], 1))
+        u["finalized_final_with_bonus"] = max(0.0, round(fin_net + u["finalized_bonus"], 1))
+        u["reviewed_final_with_bonus"] = max(0.0, round(rev_net + u["reviewed_bonus"], 1))
+
+        # 검증: 단계별 합산과 전체 합계 동기화
+        u["actual_overtime_with_bonus"] = max(0.0, round(
+            u["applied_final_with_bonus"] + u["approved_final_with_bonus"] +
+            u["finalized_final_with_bonus"] + u["reviewed_final_with_bonus"], 1
+        ))
 
     user_list = list(user_map.values())
     user_list.sort(key=lambda x: (x["team"], x["name"]))
@@ -374,7 +439,7 @@ def aggregate_user_holidays(records: list, user_positions: dict = None) -> list:
 
 
 def aggregate_team_holidays(user_summaries: list) -> list:
-    """부서(팀)별 합산 요약 집계 (4단계 포함)"""
+    """부서(팀)별 합산 요약 집계 (4단계 및 단계별 최종 실특근일+보너스 포함)"""
     team_map = {}
     for u in user_summaries:
         t = u["team"]
@@ -389,12 +454,16 @@ def aggregate_team_holidays(user_summaries: list) -> list:
                 "total_days": 0,
                 "actual_overtime_days": 0.0,
                 "bonus_count": 0,
-                "actual_overtime_with_bonus": 0.0,
-                "records_count": 0,
                 "applied_days": 0,
                 "approved_days": 0,
                 "finalized_days": 0,
-                "reviewed_days": 0
+                "reviewed_days": 0,
+                "applied_final_with_bonus": 0.0,
+                "approved_final_with_bonus": 0.0,
+                "finalized_final_with_bonus": 0.0,
+                "reviewed_final_with_bonus": 0.0,
+                "actual_overtime_with_bonus": 0.0,
+                "records_count": 0
             }
         tm = team_map[t]
         tm["member_count"] += 1
@@ -405,12 +474,16 @@ def aggregate_team_holidays(user_summaries: list) -> list:
         tm["total_days"] += u["total_days"]
         tm["actual_overtime_days"] = max(0.0, round(tm["actual_overtime_days"] + u["actual_overtime_days"], 1))
         tm["bonus_count"] += u.get("bonus_count", 0)
-        tm["actual_overtime_with_bonus"] = max(0.0, round(tm.get("actual_overtime_with_bonus", 0.0) + u.get("actual_overtime_with_bonus", 0.0), 1))
         tm["records_count"] += u["records_count"]
         tm["applied_days"] += u.get("applied_days", 0)
         tm["approved_days"] += u.get("approved_days", 0)
         tm["finalized_days"] += u.get("finalized_days", 0)
         tm["reviewed_days"] += u.get("reviewed_days", 0)
+        tm["applied_final_with_bonus"] = max(0.0, round(tm["applied_final_with_bonus"] + u.get("applied_final_with_bonus", 0.0), 1))
+        tm["approved_final_with_bonus"] = max(0.0, round(tm["approved_final_with_bonus"] + u.get("approved_final_with_bonus", 0.0), 1))
+        tm["finalized_final_with_bonus"] = max(0.0, round(tm["finalized_final_with_bonus"] + u.get("finalized_final_with_bonus", 0.0), 1))
+        tm["reviewed_final_with_bonus"] = max(0.0, round(tm["reviewed_final_with_bonus"] + u.get("reviewed_final_with_bonus", 0.0), 1))
+        tm["actual_overtime_with_bonus"] = max(0.0, round(tm["actual_overtime_with_bonus"] + u.get("actual_overtime_with_bonus", 0.0), 1))
 
     team_list = list(team_map.values())
     team_list.sort(key=lambda x: x["team"])
@@ -534,7 +607,7 @@ def generate_overtime_excel(records: list, user_positions: dict = None, period_s
     _write_title(ws2,
                  "개인별 특근 휴일수 세부 합산 및 단계별(신청/승인/확정/검토) 실특근일 정산표",
                  f"취합 기간: {period_str}  |  취합 일시: {now_str}  |  [총특근일수] = [대체근무]+[법정휴일]+[일반휴일]  |  [★최종 실특근일] = [일반특근] - [사전차감] - ([대체휴무] - [출장내사전차감])",
-                 20, s)
+                 23, s)
 
     headers2 = [
         "순번", "사원번호", "성명", "소속팀", "직급",
@@ -542,17 +615,20 @@ def generate_overtime_excel(records: list, user_positions: dict = None, period_s
         "총 특근일수\n(대체+법정+일반)",
         "신청단계 (일)", "승인단계 (일)", "확정단계 (일)", "검토완료 (일)",
         "총 사전차감 (회)", "사전차감 잔여수\n(총사전차감 - 출장내사전차감)",
-        "★ 최종 실특근일\n(일반특근-사전차감-(대휴-출장내차감)) [일]", "보너스 부여 (건)",
-        "★ 최종 실특근일+보너스\n(실특근 + 보너스) [일]", "신청건수"
+        "보너스 부여 (건)",
+        "신청: 실특근+보너스 [일]", "승인: 실특근+보너스 [일]",
+        "확정: 실특근+보너스 [일]", "검토완료: 실특근+보너스 [일]",
+        "★ 최종 실특근일+보너스\n(전체합계) [일]", "신청건수"
     ]
     fills2 = [
         None, None, None, None, None,
         s["fill_slate"], s["fill_slate"], s["fill_navy"], s["fill_navy"],
         s["fill_navy"],
-        s["fill_pend"], s["fill_slate"], s["fill_teal"], s["fill_purple"],
+        s["fill_header_apply"], s["fill_slate"], s["fill_teal"], s["fill_purple"],
         s["fill_teal"], s["fill_teal"],
-        s["fill_teal"], s["fill_gold"],
-        s["fill_teal"], None
+        s["fill_gold"],
+        s["fill_header_apply"], s["fill_slate"], s["fill_teal"], s["fill_purple"],
+        s["fill_navy"], None
     ]
     _write_header_row(ws2, 3, headers2, fills2, s)
     ws2.freeze_panes = "A4"
@@ -577,19 +653,23 @@ def generate_overtime_excel(records: list, user_positions: dict = None, period_s
             int(u.get("reviewed_days", 0)),
             int(u.get("pre_deduct_count", 0)),
             int(u.get("pre_deduct_remaining", 0)),
-            float(u["actual_overtime_days"]),
             int(u.get("bonus_count", 0)),
-            float(u.get("actual_overtime_with_bonus", u["actual_overtime_days"] + u.get("bonus_count", 0))),
+            float(u.get("applied_final_with_bonus", 0.0)),
+            float(u.get("approved_final_with_bonus", 0.0)),
+            float(u.get("finalized_final_with_bonus", 0.0)),
+            float(u.get("reviewed_final_with_bonus", 0.0)),
+            float(u.get("actual_overtime_with_bonus", 0.0)),
             int(u["records_count"])
         ]
         center_c = {1, 2, 3, 4, 5}
-        right_c  = {6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
+        right_c  = set(range(6, 24))
         num_fmt  = {
             6: "#,##0", 7: "#,##0", 8: "#,##0", 9: "#,##0", 10: "#,##0",
             11: "#,##0", 12: "#,##0", 13: "#,##0", 14: "#,##0",
-            15: "#,##0", 16: "#,##0", 17: "0.0", 18: "#,##0", 19: "0.0", 20: "#,##0"
+            15: "#,##0", 16: "#,##0", 17: "#,##0",
+            18: "0.0", 19: "0.0", 20: "0.0", 21: "0.0", 22: "0.0", 23: "#,##0"
         }
-        hl_c = {17, 19}
+        hl_c = {18, 19, 20, 21, 22}
 
         _write_data_row(ws2, r2, row_data, s, r2 % 2 == 0, center_c, right_c, num_fmt, hl_c)
         r2 += 1
@@ -599,8 +679,9 @@ def generate_overtime_excel(records: list, user_positions: dict = None, period_s
                      [(6, "#,##0", False), (7, "#,##0", False), (8, "#,##0", False),
                       (9, "#,##0", False), (10, "#,##0", False),
                       (11, "#,##0", False), (12, "#,##0", False), (13, "#,##0", False), (14, "#,##0", False),
-                      (15, "#,##0", False), (16, "#,##0", False), (17, "0.0", True),
-                      (18, "#,##0", False), (19, "0.0", True), (20, "#,##0", False)], s)
+                      (15, "#,##0", False), (16, "#,##0", False), (17, "#,##0", False),
+                      (18, "0.0", False), (19, "0.0", False), (20, "0.0", False), (21, "0.0", False),
+                      (22, "0.0", True), (23, "#,##0", False)], s)
 
     # ─────────────────────────────────────────────
     # 시트 3: 특근신청_전체원장
@@ -706,21 +787,24 @@ def generate_overtime_excel(records: list, user_positions: dict = None, period_s
     _write_title(ws4,
                  "부서(소속팀)별 특근 휴일 현황 및 4단계 구분 총괄표",
                  f"취합 기간: {period_str}  |  출력 일시: {now_str}  |  단계: 신청 / 승인 / 확정 / 검토완료",
-                 15, s)
+                 19, s)
 
     headers4 = [
         "순번", "소속팀", "소속 인원수", "대체근무 (일)", "법정휴일 (일)",
         "일반휴일 (일)", "대체휴무 (일)", "총 특근일수\n(대체+법정+일반)",
         "신청 (일)", "승인 (일)", "확정 (일)", "검토완료 (일)",
-        "★ 팀 최종 실특근일\n(일반특근-사전차감-(대휴-출장내차감)) [일]", "보너스 부여 (건)",
+        "보너스 부여 (건)",
+        "신청: 실특근+보너스 [일]", "승인: 실특근+보너스 [일]",
+        "확정: 실특근+보너스 [일]", "검토완료: 실특근+보너스 [일]",
         "★ 팀 최종 실특근일+보너스 [일]", "총 신청건수"
     ]
     fills4 = [
         None, None, None, s["fill_slate"], s["fill_slate"],
         s["fill_navy"], s["fill_navy"], s["fill_navy"],
-        s["fill_pend"], s["fill_slate"], s["fill_teal"], s["fill_purple"],
-        s["fill_teal"], s["fill_gold"],
-        s["fill_teal"], None
+        s["fill_header_apply"], s["fill_slate"], s["fill_teal"], s["fill_purple"],
+        s["fill_gold"],
+        s["fill_header_apply"], s["fill_slate"], s["fill_teal"], s["fill_purple"],
+        s["fill_navy"], None
     ]
     _write_header_row(ws4, 3, headers4, fills4, s)
     ws4.freeze_panes = "A4"
@@ -741,19 +825,22 @@ def generate_overtime_excel(records: list, user_positions: dict = None, period_s
             int(tm.get("approved_days", 0)),
             int(tm.get("finalized_days", 0)),
             int(tm.get("reviewed_days", 0)),
-            float(tm["actual_overtime_days"]),
             int(tm.get("bonus_count", 0)),
-            float(tm.get("actual_overtime_with_bonus", tm["actual_overtime_days"] + tm.get("bonus_count", 0))),
+            float(tm.get("applied_final_with_bonus", 0.0)),
+            float(tm.get("approved_final_with_bonus", 0.0)),
+            float(tm.get("finalized_final_with_bonus", 0.0)),
+            float(tm.get("reviewed_final_with_bonus", 0.0)),
+            float(tm.get("actual_overtime_with_bonus", 0.0)),
             int(tm["records_count"])
         ]
         center_c = {1, 2}
-        right_c  = {3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+        right_c  = set(range(3, 20))
         num_fmt  = {
-            3: "#,##0", 4: "#,##0", 5: "#,##0", 6: "#,##0",
-            7: "#,##0", 8: "#,##0", 9: "#,##0", 10: "#,##0",
-            11: "#,##0", 12: "#,##0", 13: "0.0", 14: "#,##0", 15: "0.0", 16: "#,##0"
+            3: "#,##0", 4: "#,##0", 5: "#,##0", 6: "#,##0", 7: "#,##0", 8: "#,##0",
+            9: "#,##0", 10: "#,##0", 11: "#,##0", 12: "#,##0", 13: "#,##0",
+            14: "0.0", 15: "0.0", 16: "0.0", 17: "0.0", 18: "0.0", 19: "#,##0"
         }
-        hl_c = {13, 15}
+        hl_c = {14, 15, 16, 17, 18}
 
         _write_data_row(ws4, r4, row_data, s, r4 % 2 == 0, center_c, right_c, num_fmt, hl_c)
         r4 += 1
@@ -762,7 +849,9 @@ def generate_overtime_excel(records: list, user_positions: dict = None, period_s
                      [(3, "#,##0", False), (4, "#,##0", False), (5, "#,##0", False),
                       (6, "#,##0", False), (7, "#,##0", False), (8, "#,##0", False),
                       (9, "#,##0", False), (10, "#,##0", False), (11, "#,##0", False), (12, "#,##0", False),
-                      (13, "0.0", True), (14, "#,##0", False), (15, "0.0", True), (16, "#,##0", False)], s)
+                      (13, "#,##0", False),
+                      (14, "0.0", False), (15, "0.0", False), (16, "0.0", False), (17, "0.0", False),
+                      (18, "0.0", True), (19, "#,##0", False)], s)
 
     # 전 시트 열 너비 자동 조정
     for ws in [ws1, ws2, ws3, ws4]:
@@ -818,23 +907,26 @@ def generate_settlement_excel(
     _write_title(ws1,
                  "★ 개인별 최종 실특근일 정산표 (4단계 진행구분)",
                  f"{period_str}  |  4단계: 신청 → 승인 → 확정 → 검토완료  |  출력일시: {now_str}",
-                 19, s)
+                 22, s)
 
     headers1 = [
         "순번", "사원번호", "성명", "소속팀",
         "대체근무 (일)", "법정휴일 (일)", "일반휴일 (일)", "대체휴무 (일)",
         "총 특근일수 (일)",
         "신청단계 (일)", "승인단계 (일)", "확정단계 (일)", "검토완료 (일)",
-        "사전차감 (회)", "사전차감 잔여 (회)",
-        "★ 최종 실특근일 (일)", "보너스 부여 (건)", "★ 최종 실특근일+보너스 [일]", "신청건수"
+        "사전차감 (회)", "사전차감 잔여 (회)", "보너스 부여 (건)",
+        "신청: 실특근+보너스 [일]", "승인: 실특근+보너스 [일]",
+        "확정: 실특근+보너스 [일]", "검토완료: 실특근+보너스 [일]",
+        "★ 최종 실특근일+보너스 [일]", "신청건수"
     ]
     fills1 = [
         None, None, None, None,
         s["fill_slate"], s["fill_slate"], s["fill_navy"], s["fill_navy"],
         s["fill_navy"],
-        s["fill_pend"], s["fill_slate"], s["fill_teal"], s["fill_purple"],
-        s["fill_teal"], s["fill_teal"],
-        s["fill_teal"], s["fill_gold"], s["fill_teal"], None
+        s["fill_header_apply"], s["fill_slate"], s["fill_teal"], s["fill_purple"],
+        s["fill_teal"], s["fill_teal"], s["fill_gold"],
+        s["fill_header_apply"], s["fill_slate"], s["fill_teal"], s["fill_purple"],
+        s["fill_navy"], None
     ]
     _write_header_row(ws1, 3, headers1, fills1, s)
     ws1.freeze_panes = "A4"
@@ -865,19 +957,23 @@ def generate_settlement_excel(
             int(u.get("reviewed_days", 0) or 0),
             int(u.get("pre_deduct_count", 0) or u.get("pre_deduct_days", 0) or 0),
             int(u.get("pre_deduct_remaining", 0) or 0),
-            actual_ot,
             b_cnt,
+            float(u.get("applied_final_with_bonus", 0.0) or 0.0),
+            float(u.get("approved_final_with_bonus", 0.0) or 0.0),
+            float(u.get("finalized_final_with_bonus", 0.0) or 0.0),
+            float(u.get("reviewed_final_with_bonus", 0.0) or 0.0),
             actual_with_b,
             int(u.get("records_count", 1) or 1)
         ]
         center_c = {1, 2, 3, 4}
-        right_c  = {5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}
+        right_c  = set(range(5, 23))
         num_fmt  = {
             5: "#,##0", 6: "#,##0", 7: "#,##0", 8: "#,##0", 9: "#,##0",
             10: "#,##0", 11: "#,##0", 12: "#,##0", 13: "#,##0",
-            14: "#,##0", 15: "#,##0", 16: "0.0", 17: "#,##0", 18: "0.0", 19: "#,##0"
+            14: "#,##0", 15: "#,##0", 16: "#,##0",
+            17: "0.0", 18: "0.0", 19: "0.0", 20: "0.0", 21: "0.0", 22: "#,##0"
         }
-        hl_c = {16, 18}
+        hl_c = {17, 18, 19, 20, 21}
 
         _write_data_row(ws1, r1, row_data, s, r1 % 2 == 0, center_c, right_c, num_fmt, hl_c)
         r1 += 1
@@ -887,8 +983,9 @@ def generate_settlement_excel(
                      [(5, "#,##0", False), (6, "#,##0", False), (7, "#,##0", False),
                       (8, "#,##0", False), (9, "#,##0", False),
                       (10, "#,##0", False), (11, "#,##0", False), (12, "#,##0", False), (13, "#,##0", False),
-                      (14, "#,##0", False), (15, "#,##0", False), (16, "0.0", True),
-                      (17, "#,##0", False), (18, "0.0", True), (19, "#,##0", False)], s)
+                      (14, "#,##0", False), (15, "#,##0", False), (16, "#,##0", False),
+                      (17, "0.0", False), (18, "0.0", False), (19, "0.0", False), (20, "0.0", False),
+                      (21, "0.0", True), (22, "#,##0", False)], s)
 
     # ─────────────────────────────────────────────
     # 시트 2: 부서별_정산_요약표
@@ -897,21 +994,25 @@ def generate_settlement_excel(
     _write_title(ws2,
                  "부서(소속팀)별 특근 정산 요약표 (4단계 구분)",
                  f"{period_str}  |  팀별 인원수 및 4단계 일수 합산  |  출력일시: {now_str}",
-                 14, s)
+                 17, s)
 
     headers2 = [
         "순번", "소속팀", "소속 인원수", "총 신청일수",
         "제외일수 (대체+법정)", "인정 특근일 (일반휴일)",
         "대체휴가 사용일수",
         "신청 (일)", "승인 (일)", "확정 (일)", "검토완료 (일)",
-        "★ 팀 최종 실특근일 (일)",
-        "보너스 부여 (건)", "★ 팀 최종 실특근일+보너스 [일]"
+        "보너스 부여 (건)",
+        "신청: 실특근+보너스 [일]", "승인: 실특근+보너스 [일]",
+        "확정: 실특근+보너스 [일]", "검토완료: 실특근+보너스 [일]",
+        "★ 팀 최종 실특근일+보너스 [일]"
     ]
     fills2 = [
         None, None, None, s["fill_slate"],
         s["fill_slate"], s["fill_navy"], s["fill_navy"],
-        s["fill_pend"], s["fill_slate"], s["fill_teal"], s["fill_purple"],
-        s["fill_teal"], s["fill_gold"], s["fill_teal"]
+        s["fill_header_apply"], s["fill_slate"], s["fill_teal"], s["fill_purple"],
+        s["fill_gold"],
+        s["fill_header_apply"], s["fill_slate"], s["fill_teal"], s["fill_purple"],
+        s["fill_navy"]
     ]
     _write_header_row(ws2, 3, headers2, fills2, s)
     ws2.freeze_panes = "A4"
@@ -933,18 +1034,22 @@ def generate_settlement_excel(
             int(t.get("approved_days", 0) or 0),
             int(t.get("finalized_days", 0) or 0),
             int(t.get("reviewed_days", 0) or 0),
-            actual_team_ot,
             team_bonus_cnt,
+            float(t.get("applied_final_with_bonus", 0.0) or 0.0),
+            float(t.get("approved_final_with_bonus", 0.0) or 0.0),
+            float(t.get("finalized_final_with_bonus", 0.0) or 0.0),
+            float(t.get("reviewed_final_with_bonus", 0.0) or 0.0),
             actual_team_with_b
         ]
         center_c = {1, 2}
-        right_c  = {3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}
+        right_c  = set(range(3, 18))
         num_fmt  = {
             3: "#,##0", 4: "#,##0", 5: "#,##0", 6: "#,##0", 7: "0.0",
             8: "#,##0", 9: "#,##0", 10: "#,##0", 11: "#,##0",
-            12: "0.0", 13: "#,##0", 14: "0.0"
+            12: "#,##0",
+            13: "0.0", 14: "0.0", 15: "0.0", 16: "0.0", 17: "0.0"
         }
-        hl_c = {12, 14}
+        hl_c = {13, 14, 15, 16, 17}
 
         _write_data_row(ws2, r2, row_data, s, r2 % 2 == 0, center_c, right_c, num_fmt, hl_c)
         r2 += 1
@@ -953,7 +1058,9 @@ def generate_settlement_excel(
                      [(3, "#,##0", False), (4, "#,##0", False), (5, "#,##0", False),
                       (6, "#,##0", False), (7, "0.0", False),
                       (8, "#,##0", False), (9, "#,##0", False), (10, "#,##0", False), (11, "#,##0", False),
-                      (12, "0.0", True), (13, "#,##0", False), (14, "0.0", True)], s)
+                      (12, "#,##0", False),
+                      (13, "0.0", False), (14, "0.0", False), (15, "0.0", False), (16, "0.0", False),
+                      (17, "0.0", True)], s)
 
     # 전 시트 열 너비 자동 조정
     for ws in [ws1, ws2]:
