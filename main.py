@@ -48,7 +48,7 @@ if not EXTERNAL_URL_FILE.exists():
     except Exception:
         pass
 
-app = FastAPI(title="Team Overtime Manager", version="v1.44")
+app = FastAPI(title="Team Overtime Manager", version="v1.45")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -1377,6 +1377,34 @@ def update_overtime(item_id: int, req: OvertimeUpdateRequest):
         bonus_clause = ", bonus_granted = ?"
         bonus_params.append(int(req.bonus_granted))
 
+    extra_status_clauses = ""
+    extra_status_params = []
+    if (is_super or is_team_admin):
+        if req.is_confirmed is not None:
+            extra_status_clauses += ", is_confirmed = ?"
+            extra_status_params.append(int(req.is_confirmed))
+            if int(req.is_confirmed) == 1 and not prev_data.get("confirmed_by"):
+                extra_status_clauses += ", confirmed_by = ?, confirmed_at = ?"
+                extra_status_params.extend([f"{changed_name}({req.changed_by.strip()})", now_str])
+            elif int(req.is_confirmed) == 0:
+                extra_status_clauses += ", confirmed_by = NULL, confirmed_at = NULL"
+        if req.is_finalized is not None:
+            extra_status_clauses += ", is_finalized = ?"
+            extra_status_params.append(int(req.is_finalized))
+            if int(req.is_finalized) == 1 and not prev_data.get("finalized_by"):
+                extra_status_clauses += ", finalized_by = ?, finalized_at = ?"
+                extra_status_params.extend([f"{changed_name}({req.changed_by.strip()})", now_str])
+            elif int(req.is_finalized) == 0:
+                extra_status_clauses += ", finalized_by = NULL, finalized_at = NULL"
+        if req.is_reviewed is not None:
+            extra_status_clauses += ", is_reviewed = ?"
+            extra_status_params.append(int(req.is_reviewed))
+            if int(req.is_reviewed) == 1 and not prev_data.get("reviewed_by"):
+                extra_status_clauses += ", reviewed_by = ?, reviewed_at = ?"
+                extra_status_params.extend([f"{changed_name}({req.changed_by.strip()})", now_str])
+            elif int(req.is_reviewed) == 0:
+                extra_status_clauses += ", reviewed_by = NULL, reviewed_at = NULL"
+
     cursor.execute(f"""
     UPDATE overtimes SET
         category = ?, start_date = ?, end_date = ?,
@@ -1385,6 +1413,7 @@ def update_overtime(item_id: int, req: OvertimeUpdateRequest):
         is_pre_deduct = ?, trip_start_date = ?, trip_end_date = ?,
         updated_at = ?
         {bonus_clause}
+        {extra_status_clauses}
     WHERE id = ?
     """, (
         req.category.strip(),
@@ -1400,6 +1429,7 @@ def update_overtime(item_id: int, req: OvertimeUpdateRequest):
         trip_end_val,
         now_str,
         *bonus_params,
+        *extra_status_params,
         item_id
     ))
     conn.commit()
@@ -1630,7 +1660,9 @@ def batch_confirm_overtimes(payload: dict):
 
 @app.post("/api/overtimes/{item_id}/finalize")
 def finalize_overtime(item_id: int, req: OvertimeFinalizeRequest):
-    """실제 특근 완료 시 사원 또는 관리자가 확정 상태 피드백 (1: 특근완료 확정, 0: 확정 취소)"""
+    """실제 특근 완료 시 사원 또는 관리자가 확정 상태 피드백 (1: 특근완료 확정, 0: 확정 취소)
+    요구사항: 특근 신청 후 관리자 승인이 없어도 사원/관리자가 확정 가능하며 승인과 확정은 별개 독립 관리됨.
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM overtimes WHERE id = ?", (item_id,))
@@ -1642,10 +1674,15 @@ def finalize_overtime(item_id: int, req: OvertimeFinalizeRequest):
     prev_data = dict(row)
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    actor_id = (req.emp_id or req.actor_emp_id or "").strip()
+    if not actor_id:
+        conn.close()
+        raise HTTPException(status_code=400, detail="사원번호가 전달되지 않았습니다.")
+
     # 권한 검증: 본인 또는 관리자만 확정 가능
-    caller = get_cached_user_role(req.emp_id.strip())
+    caller = get_cached_user_role(actor_id)
     is_admin = caller and (caller.get("is_super") == 1 or caller.get("is_admin") == 1)
-    is_owner = (prev_data["emp_id"] == req.emp_id.strip())
+    is_owner = (prev_data["emp_id"] == actor_id)
 
     if not (is_admin or is_owner):
         conn.close()
@@ -1661,21 +1698,17 @@ def finalize_overtime(item_id: int, req: OvertimeFinalizeRequest):
         conn.close()
         raise HTTPException(status_code=400, detail="이미 관리자 검토완료된 특근은 관리자만 취소할 수 있습니다.")
 
-    caller_name = caller["name"] if caller else req.emp_id.strip()
+    caller_name = caller["name"] if caller else actor_id
 
     if req.is_finalized == 1:
-        confirmed_by = prev_data.get("confirmed_by") or f"{caller_name}({req.emp_id.strip()})"
-        confirmed_at = prev_data.get("confirmed_at") or now_str
         cursor.execute("""
-        UPDATE overtimes SET is_confirmed = 1, confirmed_by = ?, confirmed_at = ?,
-                             is_finalized = 1, finalized_by = ?, finalized_at = ?, updated_at = ?
+        UPDATE overtimes SET is_finalized = 1, finalized_by = ?, finalized_at = ?, updated_at = ?
         WHERE id = ?
-        """, (confirmed_by, confirmed_at, f"{caller_name}({req.emp_id.strip()})", now_str, now_str, item_id))
+        """, (f"{caller_name}({actor_id})", now_str, now_str, item_id))
         action_name = "특근확정"
     else:
         cursor.execute("""
-        UPDATE overtimes SET is_finalized = 0, finalized_by = NULL, finalized_at = NULL,
-                             is_reviewed = 0, reviewed_by = NULL, reviewed_at = NULL, updated_at = ?
+        UPDATE overtimes SET is_finalized = 0, finalized_by = NULL, finalized_at = NULL, updated_at = ?
         WHERE id = ?
         """, (now_str, item_id))
         action_name = "확정취소"
@@ -1688,7 +1721,7 @@ def finalize_overtime(item_id: int, req: OvertimeFinalizeRequest):
     log_audit(
         overtime_id=item_id,
         action=action_name,
-        changed_by=req.emp_id.strip(),
+        changed_by=actor_id,
         changed_by_name=caller_name,
         previous_data=prev_data,
         new_data=new_data
@@ -1701,17 +1734,19 @@ def finalize_overtime(item_id: int, req: OvertimeFinalizeRequest):
 def batch_finalize_overtimes(payload: OvertimeBatchFinalizeRequest):
     """선택된 다중 특근 일괄 확정/취소"""
     ids = payload.ids
-    emp_id = payload.emp_id.strip()
+    actor_id = (payload.emp_id or payload.actor_emp_id or "").strip()
     is_finalized = payload.is_finalized
 
     if not ids:
         raise HTTPException(status_code=400, detail="선택된 항목이 없습니다.")
+    if not actor_id:
+        raise HTTPException(status_code=400, detail="사원번호가 전달되지 않았습니다.")
 
     conn = get_db_connection()
     cursor = conn.cursor()
-    caller = get_cached_user_role(emp_id)
+    caller = get_cached_user_role(actor_id)
     is_admin = caller and (caller.get("is_super") == 1 or caller.get("is_admin") == 1)
-    caller_name = caller["name"] if caller else emp_id
+    caller_name = caller["name"] if caller else actor_id
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     processed = 0
@@ -1721,7 +1756,7 @@ def batch_finalize_overtimes(payload: OvertimeBatchFinalizeRequest):
         if not ot:
             continue
         ot_dict = dict(ot)
-        is_owner = (ot_dict["emp_id"] == emp_id)
+        is_owner = (ot_dict["emp_id"] == actor_id)
         if not (is_admin or is_owner):
             continue
         if is_admin and caller.get("is_super") != 1 and not is_owner:
@@ -1729,19 +1764,15 @@ def batch_finalize_overtimes(payload: OvertimeBatchFinalizeRequest):
                 continue
 
         if is_finalized == 1:
-            confirmed_by = ot_dict.get("confirmed_by") or f"{caller_name}({emp_id})"
-            confirmed_at = ot_dict.get("confirmed_at") or now_str
             cursor.execute("""
-            UPDATE overtimes SET is_confirmed = 1, confirmed_by = ?, confirmed_at = ?,
-                                 is_finalized = 1, finalized_by = ?, finalized_at = ?, updated_at = ?
+            UPDATE overtimes SET is_finalized = 1, finalized_by = ?, finalized_at = ?, updated_at = ?
             WHERE id = ?
-            """, (confirmed_by, confirmed_at, f"{caller_name}({emp_id})", now_str, now_str, itm_id))
+            """, (f"{caller_name}({actor_id})", now_str, now_str, itm_id))
         else:
             if ot_dict.get("is_reviewed") == 1 and not is_admin:
                 continue
             cursor.execute("""
-            UPDATE overtimes SET is_finalized = 0, finalized_by = NULL, finalized_at = NULL,
-                                 is_reviewed = 0, reviewed_by = NULL, reviewed_at = NULL, updated_at = ?
+            UPDATE overtimes SET is_finalized = 0, finalized_by = NULL, finalized_at = NULL, updated_at = ?
             WHERE id = ?
             """, (now_str, itm_id))
         processed += 1
@@ -1753,7 +1784,7 @@ def batch_finalize_overtimes(payload: OvertimeBatchFinalizeRequest):
 
 @app.post("/api/overtimes/{item_id}/review")
 def review_overtime(item_id: int, req: OvertimeReviewRequest):
-    """관리자가 확정된 특근에 대해 최종 검토완료 처리 (1: 검토완료, 0: 검토 취소)"""
+    """관리자가 특근에 대해 최종 검토완료 처리 (1: 검토완료, 0: 검토 취소)"""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM overtimes WHERE id = ?", (item_id,))
@@ -1765,8 +1796,13 @@ def review_overtime(item_id: int, req: OvertimeReviewRequest):
     prev_data = dict(row)
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    admin_emp_id = (req.admin_emp_id or req.actor_emp_id or req.emp_id or "").strip()
+    if not admin_emp_id:
+        conn.close()
+        raise HTTPException(status_code=400, detail="관리자 사원번호가 전달되지 않았습니다.")
+
     # 관리자 권한 필수
-    cursor.execute("SELECT name, is_super, is_admin, team FROM users WHERE emp_id = ?", (req.admin_emp_id.strip(),))
+    cursor.execute("SELECT name, is_super, is_admin, team FROM users WHERE emp_id = ?", (admin_emp_id,))
     u_row = cursor.fetchone()
     if not u_row or (u_row["is_super"] != 1 and u_row["is_admin"] != 1):
         conn.close()
@@ -1777,19 +1813,13 @@ def review_overtime(item_id: int, req: OvertimeReviewRequest):
             conn.close()
             raise HTTPException(status_code=403, detail=f"팀관리자는 본인 소속팀({u_row['team']})의 특근만 검토할 수 있습니다.")
 
-    admin_name = u_row["name"] if u_row else req.admin_emp_id.strip()
+    admin_name = u_row["name"] if u_row else admin_emp_id
 
     if req.is_reviewed == 1:
-        confirmed_by = prev_data.get("confirmed_by") or f"{admin_name}({req.admin_emp_id.strip()})"
-        confirmed_at = prev_data.get("confirmed_at") or now_str
-        finalized_by = prev_data.get("finalized_by") or f"{admin_name}({req.admin_emp_id.strip()})"
-        finalized_at = prev_data.get("finalized_at") or now_str
         cursor.execute("""
-        UPDATE overtimes SET is_confirmed = 1, confirmed_by = ?, confirmed_at = ?,
-                             is_finalized = 1, finalized_by = ?, finalized_at = ?,
-                             is_reviewed = 1, reviewed_by = ?, reviewed_at = ?, updated_at = ?
+        UPDATE overtimes SET is_reviewed = 1, reviewed_by = ?, reviewed_at = ?, updated_at = ?
         WHERE id = ?
-        """, (confirmed_by, confirmed_at, finalized_by, finalized_at, f"{admin_name}({req.admin_emp_id.strip()})", now_str, now_str, item_id))
+        """, (f"{admin_name}({admin_emp_id})", now_str, now_str, item_id))
         action_name = "검토완료"
     else:
         cursor.execute("""
@@ -1806,7 +1836,7 @@ def review_overtime(item_id: int, req: OvertimeReviewRequest):
     log_audit(
         overtime_id=item_id,
         action=action_name,
-        changed_by=req.admin_emp_id.strip(),
+        changed_by=admin_emp_id,
         changed_by_name=admin_name,
         previous_data=prev_data,
         new_data=new_data
@@ -1819,11 +1849,13 @@ def review_overtime(item_id: int, req: OvertimeReviewRequest):
 def batch_review_overtimes(payload: OvertimeBatchReviewRequest):
     """선택된 다중 특근 일괄 검토완료/취소"""
     ids = payload.ids
-    admin_emp_id = payload.admin_emp_id.strip()
+    admin_emp_id = (payload.admin_emp_id or payload.actor_emp_id or payload.emp_id or "").strip()
     is_reviewed = payload.is_reviewed
 
     if not ids:
         raise HTTPException(status_code=400, detail="선택된 항목이 없습니다.")
+    if not admin_emp_id:
+        raise HTTPException(status_code=400, detail="관리자 사원번호가 전달되지 않았습니다.")
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -1849,16 +1881,10 @@ def batch_review_overtimes(payload: OvertimeBatchReviewRequest):
             continue
 
         if is_reviewed == 1:
-            confirmed_by = ot_dict.get("confirmed_by") or f"{admin_name}({admin_emp_id})"
-            confirmed_at = ot_dict.get("confirmed_at") or now_str
-            finalized_by = ot_dict.get("finalized_by") or f"{admin_name}({admin_emp_id})"
-            finalized_at = ot_dict.get("finalized_at") or now_str
             cursor.execute("""
-            UPDATE overtimes SET is_confirmed = 1, confirmed_by = ?, confirmed_at = ?,
-                                 is_finalized = 1, finalized_by = ?, finalized_at = ?,
-                                 is_reviewed = 1, reviewed_by = ?, reviewed_at = ?, updated_at = ?
+            UPDATE overtimes SET is_reviewed = 1, reviewed_by = ?, reviewed_at = ?, updated_at = ?
             WHERE id = ?
-            """, (confirmed_by, confirmed_at, finalized_by, finalized_at, f"{admin_name}({admin_emp_id})", now_str, now_str, itm_id))
+            """, (f"{admin_name}({admin_emp_id})", now_str, now_str, itm_id))
         else:
             cursor.execute("""
             UPDATE overtimes SET is_reviewed = 0, reviewed_by = NULL, reviewed_at = NULL, updated_at = ?
@@ -2748,7 +2774,7 @@ def download_user_manual():
     """사용자 모드 전용 매뉴얼 다운로드 (.pptx)"""
     if not USER_PPTX_PATH.exists():
         create_manual()
-    filename = "특근관리시스템_사용자_매뉴얼(v1.44).pptx"
+    filename = "특근관리시스템_사용자_매뉴얼(v1.45).pptx"
     encoded_filename = quote(filename)
     return FileResponse(
         str(USER_PPTX_PATH),
@@ -2761,7 +2787,7 @@ def download_admin_manual():
     """관리자 모드 전용 운영 매뉴얼 다운로드 (.pptx)"""
     if not ADMIN_PPTX_PATH.exists():
         create_manual()
-    filename = "특근관리시스템_관리자_운영매뉴얼(v1.44).pptx"
+    filename = "특근관리시스템_관리자_운영매뉴얼(v1.45).pptx"
     encoded_filename = quote(filename)
     return FileResponse(
         str(ADMIN_PPTX_PATH),

@@ -48,6 +48,9 @@ class OvertimeUpdateRequest(BaseModel):
     is_pre_deduct: Optional[int] = None
     trip_start_date: Optional[str] = ""
     trip_end_date: Optional[str] = ""
+    is_confirmed: Optional[int] = None
+    is_finalized: Optional[int] = None
+    is_reviewed: Optional[int] = None
 
 class OvertimeDeleteRequest(BaseModel):
     changed_by: str = Field(..., description="삭제 작업을 수행하는 사원번호")
@@ -74,9 +77,10 @@ class TeamCreateRequest(BaseModel):
     name: str = Field(..., description="소속팀 명칭")
     admin_emp_id: str = Field(..., description="슈퍼관리자 사원번호")
 
+class TeamDeleteRequest(BaseModel):
+    admin_emp_id: str = Field(..., description="슈퍼관리자 사원번호")
+
 class BackupSaveRequest(BaseModel):
-    name: Optional[str] = Field(None, description="백업 명칭")
-    label: Optional[str] = Field(None, description="백업 설명 라벨")
     description: Optional[str] = Field("", description="백업 상세 설명")
     admin_emp_id: Optional[str] = Field(None, description="관리자 사원번호")
 
@@ -84,22 +88,28 @@ class BackupLoadRequest(BaseModel):
     filename: str = Field(..., description="복원할 백업 파일명")
     admin_emp_id: Optional[str] = Field(None, description="슈퍼관리자 사원번호")
 
-# v1.44: 특근 완료 확정 및 관리자 검토완료 스키마
+# v1.44: 특근 완료 확정 및 관리자 검토완료 스키마 (사번 파라미터 유연 지원)
 class OvertimeFinalizeRequest(BaseModel):
-    emp_id: str = Field(..., description="확정 처리를 수행하는 사원번호")
+    emp_id: Optional[str] = Field(None, description="확정 처리를 수행하는 사원번호")
+    actor_emp_id: Optional[str] = Field(None, description="확정 처리를 수행하는 사원번호")
     is_finalized: int = Field(1, description="1: 특근완료 확정, 0: 확정 취소")
 
 class OvertimeBatchFinalizeRequest(BaseModel):
-    emp_id: str = Field(..., description="확정 처리를 수행하는 사원번호")
+    emp_id: Optional[str] = Field(None, description="확정 처리를 수행하는 사원번호")
+    actor_emp_id: Optional[str] = Field(None, description="확정 처리를 수행하는 사원번호")
     ids: List[int] = Field(..., description="확정 대상 특근 ID 목록")
     is_finalized: int = Field(1, description="1: 특근완료 확정, 0: 확정 취소")
 
 class OvertimeReviewRequest(BaseModel):
-    admin_emp_id: str = Field(..., description="검토 처리하는 관리자 사번")
+    admin_emp_id: Optional[str] = Field(None, description="검토 처리하는 관리자 사번")
+    actor_emp_id: Optional[str] = Field(None, description="검토 처리하는 관리자 사번")
+    emp_id: Optional[str] = Field(None, description="검토 처리하는 관리자 사번")
     is_reviewed: int = Field(1, description="1: 검토완료, 0: 검토완료 취소")
 
 class OvertimeBatchReviewRequest(BaseModel):
-    admin_emp_id: str = Field(..., description="검토 처리하는 관리자 사번")
+    admin_emp_id: Optional[str] = Field(None, description="검토 처리하는 관리자 사번")
+    actor_emp_id: Optional[str] = Field(None, description="검토 처리하는 관리자 사번")
+    emp_id: Optional[str] = Field(None, description="검토 처리하는 관리자 사번")
     ids: List[int] = Field(..., description="검토완료 대상 특근 ID 목록")
     is_reviewed: int = Field(1, description="1: 검토완료, 0: 검토완료 취소")
 

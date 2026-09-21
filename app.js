@@ -179,9 +179,17 @@ window.handleDeleteTeam = handleDeleteTeam;
 // ===== DOM 유틸리티 및 토스트 =====
 function showToast(message, type = 'success') {
   const container = document.getElementById('toastContainer');
+  let msgText = message;
+  if (msgText && typeof msgText === 'object') {
+    if (Array.isArray(msgText)) {
+      msgText = msgText.map(it => it.msg || it.message || JSON.stringify(it)).join(', ');
+    } else {
+      msgText = msgText.msg || msgText.message || msgText.detail || JSON.stringify(msgText);
+    }
+  }
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
-  toast.innerHTML = `<span>${type === 'success' ? '✓' : '⚠️'}</span> <span>${message}</span>`;
+  toast.innerHTML = `<span>${type === 'success' ? '✓' : '⚠️'}</span> <span>${escapeHtml(String(msgText || '알림'))}</span>`;
   container.appendChild(toast);
   setTimeout(() => {
     toast.style.opacity = '0';
@@ -1016,18 +1024,23 @@ function renderUserRecords() {
     const isFin = item.is_finalized === 1;
     const isRev = item.is_reviewed === 1;
 
-    let statusHtml = '';
-    let finalizeBtnHtml = '';
+    let statusHtml = `
+      <div style="display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+        ${isConf ? `<span class="badge-stage badge-stage-2" title="${escapeHtml(item.confirmed_by || '')}">✅ 승인완료</span>` : `<span class="badge-stage badge-stage-1">⏳ 승인대기</span>`}
+        ${isFin ? `<span class="badge-stage badge-stage-3" title="${escapeHtml(item.finalized_by || '')}">🎯 특근확정</span>` : `<span class="badge-stage" style="background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1; font-size:0.75rem; padding:2px 6px;">⚪ 미확정</span>`}
+        ${isRev ? `<span class="badge-stage badge-stage-4" title="${escapeHtml(item.reviewed_by || '')}">🟣 검토완료</span>` : ''}
+      </div>
+    `;
 
-    if (isRev) {
-      statusHtml = `<span class="badge-stage badge-stage-4">🟣 4단계: 검토완료 (${escapeHtml(item.reviewed_by || '관리자')})</span>`;
-    } else if (isFin) {
-      statusHtml = `<span class="badge-stage badge-stage-3">🎯 3단계: 특근확정 (${escapeHtml(item.finalized_by || '완료')})</span>`;
-    } else if (isConf) {
-      statusHtml = `<span class="badge-stage badge-stage-2">✅ 2단계: 승인완료 (${escapeHtml(item.confirmed_by || '관리자')})</span>`;
-      finalizeBtnHtml = `<button class="btn btn-sm btn-finalize" onclick="handleFinalizeOvertime(${item.id})" title="실제 특근 완료 후 확정 피드백을 기록합니다">🎯 특근완료 확정</button>`;
+    let finalizeBtnHtml = '';
+    if (!isRev) {
+      if (!isFin) {
+        finalizeBtnHtml = `<button class="btn btn-sm btn-finalize" onclick="handleFinalizeOvertime(${item.id}, 1)" title="실제 특근 완료 후 확정 피드백을 기록합니다">🎯 특근완료 확정</button>`;
+      } else {
+        finalizeBtnHtml = `<button class="btn btn-sm btn-secondary" onclick="handleFinalizeOvertime(${item.id}, 0)" title="특근확정 상태를 취소합니다" style="color:#b45309; border-color:#fde68a;">🎯 확정취소</button>`;
+      }
     } else {
-      statusHtml = `<span class="badge-stage badge-stage-1">⏳ 1단계: 신청 (승인대기)</span>`;
+      finalizeBtnHtml = `<span style="font-size:0.8rem; color:#8b5cf6; font-weight:700;">✓ 최종마감(검토완료)</span>`;
     }
 
     let daysCount = 1;
@@ -1523,6 +1536,90 @@ function setAdminEditBonus(active) {
   }
 }
 
+function setAdminEditConfirmed(active) {
+  const btn = document.getElementById('adminEditConfirmedToggleBtn');
+  const input = document.getElementById('adminEditIsConfirmed');
+  if (!btn || !input) return;
+  input.value = active ? '1' : '0';
+  if (active) {
+    btn.textContent = '✅ 승인완료';
+    btn.className = 'btn btn-sm btn-success';
+    btn.style.background = 'linear-gradient(135deg, #059669 0%, #10b981 100%)';
+    btn.style.color = '#fff';
+    btn.style.borderColor = '#059669';
+  } else {
+    btn.textContent = '⏳ 승인대기';
+    btn.className = 'btn btn-sm btn-secondary';
+    btn.style.background = '';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+  }
+}
+
+function setAdminEditFinalized(active) {
+  const btn = document.getElementById('adminEditFinalizedToggleBtn');
+  const input = document.getElementById('adminEditIsFinalized');
+  if (!btn || !input) return;
+  input.value = active ? '1' : '0';
+  if (active) {
+    btn.textContent = '🎯 확정완료';
+    btn.className = 'btn btn-sm btn-finalize';
+    btn.style.background = 'linear-gradient(135deg, #0284c7 0%, #0d9488 100%)';
+    btn.style.color = '#fff';
+    btn.style.borderColor = '#0d9488';
+  } else {
+    btn.textContent = '⚪ 미확정';
+    btn.className = 'btn btn-sm btn-secondary';
+    btn.style.background = '';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+  }
+}
+
+function setAdminEditReviewed(active) {
+  const btn = document.getElementById('adminEditReviewedToggleBtn');
+  const input = document.getElementById('adminEditIsReviewed');
+  if (!btn || !input) return;
+  input.value = active ? '1' : '0';
+  if (active) {
+    btn.textContent = '🟣 검토완료';
+    btn.className = 'btn btn-sm btn-review';
+    btn.style.background = 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)';
+    btn.style.color = '#fff';
+    btn.style.borderColor = '#7c3aed';
+  } else {
+    btn.textContent = '⚪ 미검토';
+    btn.className = 'btn btn-sm btn-secondary';
+    btn.style.background = '';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+  }
+}
+
+const adminEditConfirmedToggleBtn = document.getElementById('adminEditConfirmedToggleBtn');
+if (adminEditConfirmedToggleBtn) {
+  adminEditConfirmedToggleBtn.addEventListener('click', () => {
+    const currentVal = document.getElementById('adminEditIsConfirmed')?.value === '1';
+    setAdminEditConfirmed(!currentVal);
+  });
+}
+
+const adminEditFinalizedToggleBtn = document.getElementById('adminEditFinalizedToggleBtn');
+if (adminEditFinalizedToggleBtn) {
+  adminEditFinalizedToggleBtn.addEventListener('click', () => {
+    const currentVal = document.getElementById('adminEditIsFinalized')?.value === '1';
+    setAdminEditFinalized(!currentVal);
+  });
+}
+
+const adminEditReviewedToggleBtn = document.getElementById('adminEditReviewedToggleBtn');
+if (adminEditReviewedToggleBtn) {
+  adminEditReviewedToggleBtn.addEventListener('click', () => {
+    const currentVal = document.getElementById('adminEditIsReviewed')?.value === '1';
+    setAdminEditReviewed(!currentVal);
+  });
+}
+
 const adminEditPreDeductToggleBtn = document.getElementById('adminEditPreDeductToggleBtn');
 if (adminEditPreDeductToggleBtn) {
   adminEditPreDeductToggleBtn.addEventListener('click', () => {
@@ -1581,6 +1678,10 @@ async function openAdminEditModal(itemId) {
     setAdminEditPreDeduct(item.is_pre_deduct === 1);
     // 보너스 부여 토글 상태 세팅
     setAdminEditBonus(item.bonus_granted === 1);
+    // 3대 진행상태 세팅 (승인 / 확정 / 검토)
+    setAdminEditConfirmed(item.is_confirmed === 1);
+    setAdminEditFinalized(item.is_finalized === 1);
+    setAdminEditReviewed(item.is_reviewed === 1);
 
     openModal('adminEditModal');
   } catch (err) {
@@ -1605,6 +1706,9 @@ if (adminEditOvertimeForm) {
     const tripEndDate = (document.getElementById('adminEditTripEndDate')?.value || '').trim();
     const isPreDeduct = document.getElementById('adminEditIsPreDeduct')?.value === '1' ? 1 : 0;
     const bonusGranted = document.getElementById('adminEditBonusGranted')?.value === '1' ? 1 : 0;
+    const isConfirmed = document.getElementById('adminEditIsConfirmed')?.value === '1' ? 1 : 0;
+    const isFinalized = document.getElementById('adminEditIsFinalized')?.value === '1' ? 1 : 0;
+    const isReviewed = document.getElementById('adminEditIsReviewed')?.value === '1' ? 1 : 0;
 
     if (startDate > endDate) {
       showToast('종료일은 시작일보다 빠를 수 없습니다.', 'error');
@@ -1621,6 +1725,9 @@ if (adminEditOvertimeForm) {
       reason,
       is_pre_deduct: isPreDeduct,
       bonus_granted: bonusGranted,
+      is_confirmed: isConfirmed,
+      is_finalized: isFinalized,
+      is_reviewed: isReviewed,
       trip_start_date: tripStartDate,
       trip_end_date: tripEndDate
     };
@@ -2220,13 +2327,30 @@ function showDailyWorkers(dateStr, list) {
           <span class="toggle-slider"></span>
         </label>
       </td>
-      <td>
-        <label class="toggle-switch" title="확인(승인) 원클릭 전환">
-          <input type="checkbox" class="confirm-toggle" data-id="${item.id}" ${isConf ? 'checked' : ''}>
-          <span class="toggle-slider"></span>
-        </label>
+      <td style="text-align: center;">
+        <div style="display: flex; flex-direction: column; gap: 2px; align-items: center;">
+          ${isConf ? `<span class="badge-stage badge-stage-2" style="font-size:0.7rem; padding:1px 5px;" title="${escapeHtml(item.confirmed_by || '')}">✅ 승인</span>` : `<span class="badge-stage badge-stage-1" style="font-size:0.7rem; padding:1px 5px;">⏳ 대기</span>`}
+          ${isFin ? `<span class="badge-stage badge-stage-3" style="font-size:0.7rem; padding:1px 5px;" title="${escapeHtml(item.finalized_by || '')}">🎯 확정</span>` : `<span class="badge-stage" style="background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1; font-size:0.7rem; padding:1px 5px;">⚪ 미확정</span>`}
+          ${isRev ? `<span class="badge-stage badge-stage-4" style="font-size:0.7rem; padding:1px 5px;" title="${escapeHtml(item.reviewed_by || '')}">🟣 검토</span>` : `<span class="badge-stage" style="background:#f8fafc; color:#94a3b8; border:1px solid #e2e8f0; font-size:0.7rem; padding:1px 5px;">⚪ 미검토</span>`}
+        </div>
       </td>
-      <td style="font-size:0.8rem; color:var(--text-muted);">${item.confirmed_by || '-'}</td>
+      <td style="text-align: center;">
+        <div style="display: flex; flex-direction: column; gap: 3px; align-items: center;">
+          <div style="display: flex; gap: 3px;">
+            ${!isConf 
+              ? `<button class="btn btn-success btn-xs" onclick="handleDirectConfirm(${item.id})" title="승인" style="padding: 2px 6px; font-size: 0.72rem;">✓ 승인</button>` 
+              : `<button class="btn btn-secondary btn-xs" onclick="handleDirectCancelConfirm(${item.id})" title="승인 취소" style="padding: 2px 6px; font-size: 0.72rem; color:#ef4444; border-color:#fca5a5;">✕ 취소</button>`}
+            ${!isFin 
+              ? `<button class="btn btn-finalize btn-xs" onclick="handleFinalizeOvertime(${item.id}, 1)" title="확정" style="padding: 2px 6px; font-size: 0.72rem;">🎯 확정</button>` 
+              : `<button class="btn btn-secondary btn-xs" onclick="handleFinalizeOvertime(${item.id}, 0)" title="확정 취소" style="padding: 2px 6px; font-size: 0.72rem; color:#b45309; border-color:#fde68a;">✕ 확정취소</button>`}
+          </div>
+          <div>
+            ${!isRev 
+              ? `<button class="btn btn-review btn-xs" onclick="handleReviewOvertime(${item.id}, 1)" title="검토완료" style="padding: 2px 6px; font-size: 0.72rem;">🟣 검토</button>` 
+              : `<button class="btn btn-secondary btn-xs" onclick="handleReviewOvertime(${item.id}, 0)" title="검토 취소" style="padding: 2px 6px; font-size: 0.72rem; color:#7c3aed; border-color:#ddd6fe;">✕ 검토취소</button>`}
+          </div>
+        </div>
+      </td>
       <td>
         <div style="display:flex; gap:0.25rem;">
           <button class="btn btn-secondary btn-sm" onclick="openHistoryModal(${item.id})">이력</button>
@@ -2334,44 +2458,31 @@ function renderAdminOvertimeTable() {
     const isFin = item.is_finalized === 1;
     const isRev = item.is_reviewed === 1;
 
-    let stageBadge = '';
-    if (isRev) {
-      stageBadge = `<span class="badge-stage badge-stage-4">🟣 4. 검토완료</span>`;
-    } else if (isFin) {
-      stageBadge = `<span class="badge-stage badge-stage-3">🎯 3. 특근확정</span>`;
-    } else if (isConf) {
-      stageBadge = `<span class="badge-stage badge-stage-2">✅ 2. 승인완료</span>`;
-    } else {
-      stageBadge = `<span class="badge-stage badge-stage-1">⏳ 1. 신청(대기)</span>`;
-    }
+    let stageBadge = `
+      <div style="display: flex; flex-direction: column; gap: 2px; align-items: center;">
+        ${isConf ? `<span class="badge-stage badge-stage-2" title="${escapeHtml(item.confirmed_by || '')}" style="font-size:0.72rem; padding:1px 6px;">✅ 승인</span>` : `<span class="badge-stage badge-stage-1" style="font-size:0.72rem; padding:1px 6px;">⏳ 대기</span>`}
+        ${isFin ? `<span class="badge-stage badge-stage-3" title="${escapeHtml(item.finalized_by || '')}" style="font-size:0.72rem; padding:1px 6px;">🎯 확정</span>` : `<span class="badge-stage" style="background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1; font-size:0.72rem; padding:1px 6px;">⚪ 미확정</span>`}
+        ${isRev ? `<span class="badge-stage badge-stage-4" title="${escapeHtml(item.reviewed_by || '')}" style="font-size:0.72rem; padding:1px 6px;">🟣 검토</span>` : `<span class="badge-stage" style="background:#f8fafc; color:#94a3b8; border:1px solid #e2e8f0; font-size:0.72rem; padding:1px 6px;">⚪ 미검토</span>`}
+      </div>
+    `;
 
-    let actionFeedbackHtml = '';
-    if (!isConf) {
-      actionFeedbackHtml = `
-        <button class="btn btn-success btn-xs" onclick="handleDirectConfirm(${item.id})" title="특근 신청을 승인합니다" style="padding: 2px 8px; font-size: 0.74rem;">✓ 승인</button>
-      `;
-    } else if (!isFin) {
-      actionFeedbackHtml = `
-        <div style="display: flex; flex-direction: column; gap: 2px; align-items: center;">
-          <span style="font-size: 0.72rem; color: #1d4ed8; font-weight: 600;">승인: ${escapeHtml(item.confirmed_by || '관리자')}</span>
-          <button class="btn btn-finalize btn-xs" onclick="handleFinalizeOvertime(${item.id})" title="실제 특근 완료 확정을 기록합니다" style="padding: 2px 8px; font-size: 0.74rem;">🎯 확정</button>
+    let actionFeedbackHtml = `
+      <div style="display: flex; flex-direction: column; gap: 3px; align-items: center;">
+        <div style="display: flex; gap: 3px;">
+          ${!isConf 
+            ? `<button class="btn btn-success btn-xs" onclick="handleDirectConfirm(${item.id})" title="특근 신청을 승인합니다" style="padding: 2px 7px; font-size: 0.72rem;">✓ 승인</button>` 
+            : `<button class="btn btn-secondary btn-xs" onclick="handleDirectCancelConfirm(${item.id})" title="승인을 취소합니다" style="padding: 2px 6px; font-size: 0.72rem; color:#ef4444; border-color:#fca5a5;">✕ 취소</button>`}
+          ${!isFin 
+            ? `<button class="btn btn-finalize btn-xs" onclick="handleFinalizeOvertime(${item.id}, 1)" title="실제 특근 완료 확정을 기록합니다" style="padding: 2px 7px; font-size: 0.72rem;">🎯 확정</button>` 
+            : `<button class="btn btn-secondary btn-xs" onclick="handleFinalizeOvertime(${item.id}, 0)" title="특근확정을 취소합니다" style="padding: 2px 6px; font-size: 0.72rem; color:#b45309; border-color:#fde68a;">✕ 확정취소</button>`}
         </div>
-      `;
-    } else if (!isRev) {
-      actionFeedbackHtml = `
-        <div style="display: flex; flex-direction: column; gap: 2px; align-items: center;">
-          <span style="font-size: 0.72rem; color: #047857; font-weight: 600;">확정: ${escapeHtml(item.finalized_by || '-')}</span>
-          <button class="btn btn-review btn-xs" onclick="handleReviewOvertime(${item.id})" title="확정 건에 대한 관리자 최종 검토완료를 기록합니다" style="padding: 2px 8px; font-size: 0.74rem;">🟣 검토완료</button>
+        <div>
+          ${!isRev 
+            ? `<button class="btn btn-review btn-xs" onclick="handleReviewOvertime(${item.id}, 1)" title="관리자 최종 검토완료를 기록합니다" style="padding: 2px 8px; font-size: 0.72rem;">🟣 검토완료</button>` 
+            : `<button class="btn btn-secondary btn-xs" onclick="handleReviewOvertime(${item.id}, 0)" title="검토완료를 취소합니다" style="padding: 2px 6px; font-size: 0.72rem; color:#7c3aed; border-color:#ddd6fe;">✕ 검토취소</button>`}
         </div>
-      `;
-    } else {
-      actionFeedbackHtml = `
-        <div style="display: flex; flex-direction: column; gap: 2px; align-items: center;">
-          <span style="font-size: 0.74rem; color: #6d28d9; font-weight: 700;">검토: ${escapeHtml(item.reviewed_by || '완료')}</span>
-          <span style="font-size: 0.7rem; color: #64748b;">${item.reviewed_at ? item.reviewed_at.slice(0, 16) : ''}</span>
-        </div>
-      `;
-    }
+      </div>
+    `;
 
     tr.innerHTML = `
       <td style="text-align: center;">
@@ -2652,26 +2763,58 @@ async function handleDirectConfirm(itemId) {
   }
 }
 
+// 관리자 개별 건 승인 취소
+async function handleDirectCancelConfirm(itemId) {
+  if (!confirm('이 특근 건의 승인을 취소하시겠습니까?\n\n(상태가 승인대기로 변경됩니다.)')) return;
+  try {
+    const res = await fetch(`/api/overtimes/${itemId}/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        admin_emp_id: currentUser ? currentUser.emp_id : '',
+        is_confirmed: 0
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.detail || '승인 취소 실패', 'error');
+      return;
+    }
+    showToast(data.message || '승인이 취소되었습니다.');
+    if (typeof loadAdminData === 'function') await loadAdminData();
+    if (typeof loadUserOvertimes === 'function') await loadUserOvertimes();
+  } catch (err) {
+    console.error(err);
+    showToast('승인 취소 처리 중 오류 발생', 'error');
+  }
+}
+
 // 3단계: 실제 특근 완료 피드백 [확정] 처리 (사원 또는 관리자)
-async function handleFinalizeOvertime(itemId) {
-  if (!confirm('실제 특근을 정상적으로 완료하셨습니까?\n\n[확인]을 누르시면 3단계 [특근확정] 상태로 등록되며, 관리자 최종 검토 단계로 이관됩니다.')) {
+async function handleFinalizeOvertime(itemId, isFinalize = 1) {
+  const isCancel = (isFinalize === 0);
+  const confirmMsg = isCancel 
+    ? '이 특근 건의 [특근확정] 상태를 취소하시겠습니까?' 
+    : '실제 특근을 정상적으로 완료하셨습니까?\n\n[확인]을 누르시면 [특근확정] 상태로 등록됩니다.';
+  if (!confirm(confirmMsg)) {
     return;
   }
+  const empId = currentUser ? currentUser.emp_id : '';
   try {
     const res = await fetch(`/api/overtimes/${itemId}/finalize`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        actor_emp_id: currentUser ? currentUser.emp_id : '',
-        is_finalized: 1
+        emp_id: empId,
+        actor_emp_id: empId,
+        is_finalized: isFinalize
       })
     });
     const data = await res.json();
     if (!res.ok) {
-      showToast(data.detail || '특근 확정 처리 실패', 'error');
+      showToast(data.detail || (isCancel ? '확정 취소 실패' : '특근 확정 처리 실패'), 'error');
       return;
     }
-    showToast(data.message || '🎯 특근완료 확정이 성공적으로 등록되었습니다!');
+    showToast(data.message || (isCancel ? '특근 확정이 취소되었습니다.' : '🎯 특근완료 확정이 성공적으로 등록되었습니다!'));
     if (typeof loadUserOvertimes === 'function') await loadUserOvertimes();
     if (typeof loadAdminData === 'function') await loadAdminData();
   } catch (err) {
@@ -2681,30 +2824,37 @@ async function handleFinalizeOvertime(itemId) {
 }
 
 // 4단계: 관리자 최종 검토완료 처리
-async function handleReviewOvertime(itemId) {
-  if (!confirm('해당 특근 건에 대하여 최종 검토를 완료하시겠습니까?\n\n[확인]을 누르시면 4단계 [검토완료] 상태로 마감 처리됩니다.')) {
+async function handleReviewOvertime(itemId, isReview = 1) {
+  const isCancel = (isReview === 0);
+  const confirmMsg = isCancel 
+    ? '이 특근 건의 [검토완료] 상태를 취소하시겠습니까?' 
+    : '해당 특근 건에 대하여 최종 검토를 완료하시겠습니까?\n\n[확인]을 누르시면 [검토완료] 상태로 마감 처리됩니다.';
+  if (!confirm(confirmMsg)) {
     return;
   }
+  const adminId = currentUser ? currentUser.emp_id : '';
   try {
     const res = await fetch(`/api/overtimes/${itemId}/review`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        admin_emp_id: currentUser ? currentUser.emp_id : '',
-        is_reviewed: 1
+        admin_emp_id: adminId,
+        actor_emp_id: adminId,
+        emp_id: adminId,
+        is_reviewed: isReview
       })
     });
     const data = await res.json();
     if (!res.ok) {
-      showToast(data.detail || '검토완료 처리 실패', 'error');
+      showToast(data.detail || (isCancel ? '검토 취소 실패' : '검토완료 처리 실패'), 'error');
       return;
     }
-    showToast(data.message || '🟣 관리자 검토완료가 정상 등록되었습니다!');
+    showToast(data.message || (isCancel ? '검토완료가 취소되었습니다.' : '🟣 관리자 검토완료가 정상 등록되었습니다!'));
     if (typeof loadAdminData === 'function') await loadAdminData();
     if (typeof loadUserOvertimes === 'function') await loadUserOvertimes();
   } catch (err) {
     console.error(err);
-    showToast('검토완료 처리 중 오류 발생', 'error');
+    showToast('검토 처리 중 오류 발생', 'error');
   }
 }
 
@@ -2718,13 +2868,15 @@ async function handleBatchFinalize() {
 
   const targetBtn = document.getElementById('batchFinalizeBtn');
   const restoreBtn = setButtonLoading(targetBtn, '일괄 확정 중...');
+  const empId = currentUser ? currentUser.emp_id : '';
   try {
     const res = await fetch('/api/overtimes/batch-finalize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ids: Array.from(selectedOvertimeIds),
-        actor_emp_id: currentUser ? currentUser.emp_id : '',
+        emp_id: empId,
+        actor_emp_id: empId,
         is_finalized: 1
       })
     });
@@ -2757,13 +2909,16 @@ async function handleBatchReview() {
 
   const targetBtn = document.getElementById('batchReviewBtn');
   const restoreBtn = setButtonLoading(targetBtn, '일괄 검토완료 중...');
+  const adminId = currentUser ? currentUser.emp_id : '';
   try {
     const res = await fetch('/api/overtimes/batch-review', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ids: Array.from(selectedOvertimeIds),
-        admin_emp_id: currentUser ? currentUser.emp_id : '',
+        admin_emp_id: adminId,
+        actor_emp_id: adminId,
+        emp_id: adminId,
         is_reviewed: 1
       })
     });
@@ -2797,8 +2952,10 @@ if (batchReviewBtn) {
 }
 
 window.handleDirectConfirm = handleDirectConfirm;
+window.handleDirectCancelConfirm = handleDirectCancelConfirm;
 window.handleFinalizeOvertime = handleFinalizeOvertime;
 window.handleReviewOvertime = handleReviewOvertime;
+window.openAdminEditModal = openAdminEditModal;
 
 // 필터 바 이벤트
 ['filterStartDate', 'filterEndDate', 'filterTeam', 'filterCategory', 'filterStatus'].forEach(id => {

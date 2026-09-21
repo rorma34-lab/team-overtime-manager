@@ -37,7 +37,7 @@
         <div class="brand-logo">⏰</div>
         <div>
           <span class="brand-title">스마트 특근 관리</span>
-          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.44</span>
+          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.45</span>
           <span class="brand-subtitle">Smart Overtime System</span>
         </div>
       </div>
@@ -535,8 +535,8 @@
                       <th>사유</th>
                       <th>보너스</th>
                       <th>사전차감</th>
-                      <th>확인(승인)</th>
-                      <th>확인자</th>
+                      <th>진행상태</th>
+                      <th>승인/확정/검토 관리</th>
                       <th>관리</th>
                     </tr>
                   </thead>
@@ -614,8 +614,8 @@
                     <th>사유</th>
                     <th class="sortable" data-sort="bonus_granted">보너스 <span class="sort-icon">↕</span></th>
                     <th class="sortable" data-sort="is_pre_deduct">사전차감 <span class="sort-icon">↕</span></th>
-                    <th class="sortable" data-sort="is_confirmed">진행단계(4단계) <span class="sort-icon">↕</span></th>
-                    <th>확정 / 검토</th>
+                    <th class="sortable" data-sort="is_confirmed">진행상태 <span class="sort-icon">↕</span></th>
+                    <th>승인 / 확정 / 검토 관리</th>
                     <th>관리</th>
                   </tr>
                 </thead>
@@ -1031,6 +1031,53 @@
             </div>
           </div>
 
+          <!-- 관리자 전용: 3대 진행상태 직접 제어 (승인 / 확정 / 검토) -->
+          <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; padding: 0.85rem 1rem; border-radius: 8px; margin-bottom: 0.85rem;">
+            <div style="font-size: 0.88rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.6rem; display: flex; align-items: center; justify-content: space-between;">
+              <span>🚦 진행 상태 관리 (승인 / 확정 / 검토)</span>
+              <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">단계를 독립적으로 설정/저장</span>
+            </div>
+            
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.35rem 0; border-bottom: 1px dashed #e2e8f0;">
+              <div>
+                <span style="font-size: 0.84rem; font-weight: 700; color: #1e293b;">1. 관리자 승인</span>
+                <span style="font-size: 0.75rem; color: #64748b; margin-left: 4px;">(사전 승인)</span>
+              </div>
+              <div>
+                <button type="button" id="adminEditConfirmedToggleBtn" class="btn btn-sm btn-secondary" style="font-weight: 700; min-width: 95px; border-radius: 20px; transition: all 0.2s;">
+                  ⏳ 승인대기
+                </button>
+                <input type="hidden" id="adminEditIsConfirmed" value="0">
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.35rem 0; border-bottom: 1px dashed #e2e8f0;">
+              <div>
+                <span style="font-size: 0.84rem; font-weight: 700; color: #1e293b;">2. 특근완료 확정</span>
+                <span style="font-size: 0.75rem; color: #64748b; margin-left: 4px;">(특근완료 확정)</span>
+              </div>
+              <div>
+                <button type="button" id="adminEditFinalizedToggleBtn" class="btn btn-sm btn-secondary" style="font-weight: 700; min-width: 95px; border-radius: 20px; transition: all 0.2s;">
+                  ⚪ 미확정
+                </button>
+                <input type="hidden" id="adminEditIsFinalized" value="0">
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.35rem 0;">
+              <div>
+                <span style="font-size: 0.84rem; font-weight: 700; color: #1e293b;">3. 관리자 최종 검토</span>
+                <span style="font-size: 0.75rem; color: #64748b; margin-left: 4px;">(최종 검토 마감)</span>
+              </div>
+              <div>
+                <button type="button" id="adminEditReviewedToggleBtn" class="btn btn-sm btn-secondary" style="font-weight: 700; min-width: 95px; border-radius: 20px; transition: all 0.2s;">
+                  ⚪ 미검토
+                </button>
+                <input type="hidden" id="adminEditIsReviewed" value="0">
+              </div>
+            </div>
+          </div>
+
           <div class="input-group" style="margin-top: 0.85rem;">
             <label class="input-label">특근/휴무 사유</label>
             <input type="text" id="adminEditReason" class="input-field" required>
@@ -1114,14 +1161,33 @@
       </div>
       <div class="modal-body" style="max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1.25rem;">
         
-        <!-- v1.44 (Latest) -->
+        <!-- v1.45 (Latest) -->
         <div style="background: var(--bg-card); border: 2px solid #0d9488; padding: 1.1rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
           <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-            <span style="background: #0d9488; color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.44</span>
+            <span style="background: #0d9488; color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.45</span>
             <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-main);">최신 정식 릴리즈 (Latest)</span>
             <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-21</span>
           </div>
           <div style="font-weight: 800; color: #0d9488; margin-bottom: 0.5rem; font-size: 0.88rem;">
+            🎯 v1.45 승인/확정 완전 독립 운영, 관리자 확정/검토 원클릭 제어 & 모달 직접 관리, Object 오류 해결
+          </div>
+          <ul style="margin-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.84rem; line-height: 1.6; color: var(--text-main);">
+            <li><b>승인과 확정의 완전한 독립 분리</b>: 특근 신청 후 관리자 승인이 없어도 사원/관리자가 실특근 완료 후 즉시 [🎯 특근완료 확정] 및 [🎯 확정취소] 가능 (승인과 확정 개별 독립 배지 동시 표시)</li>
+            <li><b>관리자 모드 확정/검토 종합 관리 신설</b>: 관리자 테이블 목록 및 캘린더 일자별 상세 패널에서 승인/확정/검토 각각의 원클릭 처리 및 취소 버튼 세트 완비</li>
+            <li><b>관리자 특근 수정 모달(`adminEditModal`) 3대 상태 직접 제어</b>: 승인, 특근확정, 검토완료 3대 플래그를 관리자가 원하는 대로 직접 토글 변경 및 감사 로그 안전 보존</li>
+            <li><b>팝업 에러 방어 및 한글 메시지 안내 강화</b>: 팝업 확인 시 발생하던 `[object Object]` 문자열 오류 완전 차단 및 직관적인 한글 에러/안내 토스트 제공</li>
+            <li><b>사용자 및 관리자 매뉴얼 v1.45 전면 개정</b>: 승인/확정 독립 운영 및 관리자 개별 상태 제어 가이드 최신화 및 루트 자동 동기화</li>
+          </ul>
+        </div>
+
+        <!-- v1.44 -->
+        <div style="background: var(--bg-subtle); border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-md);">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem;">
+            <span style="background: var(--text-muted); color: #fff; font-size: 0.8rem; font-weight: 700; padding: 2px 10px; border-radius: 9999px;">v1.44</span>
+            <span style="font-size: 0.9rem; font-weight: 700; color: var(--text-main);">이전 릴리즈</span>
+            <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-21</span>
+          </div>
+          <div style="font-weight: 800; color: var(--primary); margin-bottom: 0.5rem; font-size: 0.88rem;">
             🎯 v1.44 4단계 특근 라이프사이클(신청→승인→확정→검토), 엑셀 정산 구분 & 무기명 소통함
           </div>
           <ul style="margin-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.84rem; line-height: 1.6; color: var(--text-main);">
