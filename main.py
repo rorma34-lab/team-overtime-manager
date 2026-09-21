@@ -1684,11 +1684,25 @@ def review_overtime(item_id: int, req: OvertimeReviewRequest):
     admin_name = u_row["name"] if u_row else admin_emp_id
 
     if req.is_reviewed == 1:
+        # 검토완료 시 승인 + 확정 동시 자동 처리
+        actor_label = f"{admin_name}({admin_emp_id})"
+        # 이미 승인/확정된 것은 덮어 쓰지 않게: 기존값 유지
+        confirmed_by_val = prev_data.get("confirmed_by") or actor_label
+        confirmed_at_val = prev_data.get("confirmed_at") or now_str
+        finalized_by_val = prev_data.get("finalized_by") or actor_label
+        finalized_at_val = prev_data.get("finalized_at") or now_str
         cursor.execute("""
-        UPDATE overtimes SET is_reviewed = 1, reviewed_by = ?, reviewed_at = ?, updated_at = ?
+        UPDATE overtimes
+        SET is_reviewed = 1, reviewed_by = ?, reviewed_at = ?,
+            is_confirmed = 1, confirmed_by = ?, confirmed_at = ?,
+            is_finalized = 1, finalized_by = ?, finalized_at = ?,
+            updated_at = ?
         WHERE id = ?
-        """, (f"{admin_name}({admin_emp_id})", now_str, now_str, item_id))
-        action_name = "검토완료"
+        """, (actor_label, now_str,
+              confirmed_by_val, confirmed_at_val,
+              finalized_by_val, finalized_at_val,
+              now_str, item_id))
+        action_name = "검토완료(승인+확정 자동)"
     else:
         cursor.execute("""
         UPDATE overtimes SET is_reviewed = 0, reviewed_by = NULL, reviewed_at = NULL, updated_at = ?
@@ -1749,10 +1763,23 @@ def batch_review_overtimes(payload: OvertimeBatchReviewRequest):
             continue
 
         if is_reviewed == 1:
+            # 검토완료 시 승인 + 확정 동시 자동 처리
+            actor_label = f"{admin_name}({admin_emp_id})"
+            confirmed_by_val = ot_dict.get("confirmed_by") or actor_label
+            confirmed_at_val = ot_dict.get("confirmed_at") or now_str
+            finalized_by_val = ot_dict.get("finalized_by") or actor_label
+            finalized_at_val = ot_dict.get("finalized_at") or now_str
             cursor.execute("""
-            UPDATE overtimes SET is_reviewed = 1, reviewed_by = ?, reviewed_at = ?, updated_at = ?
+            UPDATE overtimes
+            SET is_reviewed = 1, reviewed_by = ?, reviewed_at = ?,
+                is_confirmed = 1, confirmed_by = ?, confirmed_at = ?,
+                is_finalized = 1, finalized_by = ?, finalized_at = ?,
+                updated_at = ?
             WHERE id = ?
-            """, (f"{admin_name}({admin_emp_id})", now_str, now_str, itm_id))
+            """, (actor_label, now_str,
+                  confirmed_by_val, confirmed_at_val,
+                  finalized_by_val, finalized_at_val,
+                  now_str, itm_id))
         else:
             cursor.execute("""
             UPDATE overtimes SET is_reviewed = 0, reviewed_by = NULL, reviewed_at = NULL, updated_at = ?

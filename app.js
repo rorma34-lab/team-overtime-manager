@@ -2831,8 +2831,8 @@ async function handleFinalizeOvertime(itemId, isFinalize = 1) {
 async function handleReviewOvertime(itemId, isReview = 1) {
   const isCancel = (isReview === 0);
   const confirmMsg = isCancel 
-    ? '이 특근 건의 [검토완료] 상태를 취소하시겠습니까?' 
-    : '해당 특근 건에 대하여 최종 검토를 완료하시겠습니까?\n\n[확인]을 누르시면 [검토완료] 상태로 마감 처리됩니다.';
+    ? '이 특근 건의 [검토완료] 상태를 취소하시겠습니까?\n\n※ 검토취소 시 확정/승인 상태는 그대로 유지됩니다.' 
+    : '해당 특근 건에 대하여 최종 검토를 완료하시겠습니까?\n\n✅ [확인]을 누르시면:\n  • 승인 ✓\n  • 특근확정 ✓\n  • 검토완료 ✓\n세 가지가 동시에 완료 처리됩니다.';
   if (!confirm(confirmMsg)) {
     return;
   }
@@ -2853,7 +2853,7 @@ async function handleReviewOvertime(itemId, isReview = 1) {
       showToast(data.detail || (isCancel ? '검토 취소 실패' : '검토완료 처리 실패'), 'error');
       return;
     }
-    showToast(data.message || (isCancel ? '검토완료가 취소되었습니다.' : '🟣 관리자 검토완료가 정상 등록되었습니다!'));
+    showToast(data.message || (isCancel ? '검토완료가 취소되었습니다.' : '🟣 검토완료 — 승인 + 특근확정 + 검토완료 모두 처리 완료!'));
     if (typeof loadAdminData === 'function') await loadAdminData();
     if (typeof loadUserOvertimes === 'function') await loadUserOvertimes();
   } catch (err) {
@@ -2909,7 +2909,7 @@ async function handleBatchReview() {
     showToast('일괄 검토완료할 항목의 체크박스를 선택해주세요.', 'error');
     return;
   }
-  if (!confirm(`선택한 ${selectedOvertimeIds.size}건을 최종 [검토완료] 처리하시겠습니까?`)) return;
+  if (!confirm(`선택한 ${selectedOvertimeIds.size}건을 최종 [검토완료] 처리하시겠습니까?\n\n✅ 승인 + 특근확정 + 검토완료 세 가지가 동시에 처리됩니다.`)) return;
 
   const targetBtn = document.getElementById('batchReviewBtn');
   const restoreBtn = setButtonLoading(targetBtn, '일괄 검토완료 중...');
