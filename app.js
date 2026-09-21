@@ -3041,12 +3041,16 @@ if (adminProxyOvertimeBtn) {
     }
 
     const proxySelect = document.getElementById('proxyUserSelect');
+    const activeDept = selectedDeptFilter || document.getElementById('filterTeam')?.value || document.getElementById('summaryTeamFilter')?.value || '';
+
     if (proxySelect) {
-      proxySelect.innerHTML = '<option value="">팀원을 선택하세요</option>';
+      proxySelect.innerHTML = `<option value="">${activeDept ? `[${activeDept}] 팀원을 선택하세요` : '팀원을 선택하세요'}</option>`;
       
-      // ps37082 사원번호만 제외하고 모든 팀원 표시 (요구사항 2)
+      // ps37082 제외 및 부서 현황에서 선택된 부서의 팀원만 필터링 (요구사항 1)
       let candidateUsers = (allUsersCache || []).filter(u => {
-        return (u.emp_id || '').toLowerCase() !== 'ps37082';
+        if ((u.emp_id || '').toLowerCase() === 'ps37082') return false;
+        if (activeDept && (u.team || '') !== activeDept) return false;
+        return true;
       });
 
       candidateUsers.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -3059,7 +3063,7 @@ if (adminProxyOvertimeBtn) {
       });
     }
 
-    // 기본값 설정 (캘린더 선택 날짜 우선 반영, 없으면 토요일 기본값) (요구사항 1)
+    // 기본값 설정 (캘린더 선택 날짜 우선 반영, 없으면 해당 주의 토요일 디폴트)
     const defaultDate = adminSelectedDate || getThisSaturdayStr();
     const startDateInput = document.getElementById('proxyStartDate');
     const endDateInput = document.getElementById('proxyEndDate');
@@ -4208,7 +4212,21 @@ if (summaryResetBtn) {
     if (sInput) sInput.value = '';
     if (eInput) eInput.value = '';
     if (tInput) tInput.value = '';
+    selectedDeptFilter = '';
+    const filterTeamEl = document.getElementById('filterTeam');
+    if (filterTeamEl) filterTeamEl.value = '';
     loadSettlementSummary();
+  });
+}
+
+const summaryTeamFilterEl = document.getElementById('summaryTeamFilter');
+if (summaryTeamFilterEl) {
+  summaryTeamFilterEl.addEventListener('change', () => {
+    selectedDeptFilter = summaryTeamFilterEl.value || '';
+    const filterTeamEl = document.getElementById('filterTeam');
+    if (filterTeamEl) filterTeamEl.value = selectedDeptFilter;
+    loadSettlementSummary();
+    loadAdminData();
   });
 }
 
@@ -4224,7 +4242,7 @@ if (exportSummaryExcelBtn) {
 
     const sDate = document.getElementById('summaryStartDate')?.value || '';
     const eDate = document.getElementById('summaryEndDate')?.value || '';
-    const tFilter = document.getElementById('summaryTeamFilter')?.value || '';
+    const tFilter = selectedDeptFilter || document.getElementById('summaryTeamFilter')?.value || document.getElementById('filterTeam')?.value || '';
 
     showToast('정산표 엑셀을 생성 중입니다...');
 
@@ -4258,6 +4276,115 @@ if (exportSummaryExcelBtn) {
       console.error('Settlement export error:', err);
       showToast('엑셀 다운로드 중 오류가 발생했습니다.', 'error');
     }
+  });
+}
+
+// 실특근 정산표 엑셀 가져오기 (요구사항 3 & 4)
+const importSummaryExcelBtn = document.getElementById('importSummaryExcelBtn');
+const summaryExcelFileInput = document.getElementById('summaryExcelFileInput');
+
+if (importSummaryExcelBtn && summaryExcelFileInput) {
+  importSummaryExcelBtn.addEventListener('click', () => {
+    summaryExcelFileInput.value = '';
+    summaryExcelFileInput.click();
+  });
+
+  summaryExcelFileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const targetTeam = selectedDeptFilter || document.getElementById('summaryTeamFilter')?.value || document.getElementById('filterTeam')?.value || '';
+
+    // 1. 진행중 안내 모달 표시 (요구사항 4)
+    const progressDeptBadge = document.getElementById('importProgressDeptBadge');
+    if (progressDeptBadge) {
+      progressDeptBadge.textContent = `🏢 부서 현황: ${targetTeam ? targetTeam : '전체 부서 (모든 부서 반영)'}`;
+    }
+    openModal('settlementImportProgressModal');
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const rawResult = evt.target.result || '';
+        const base64Content = rawResult.includes(',') ? rawResult.split(',')[1] : rawResult;
+
+        const res = await fetch('/api/overtimes/import-settlement', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            file_base64: base64Content,
+            filename: file.name,
+            target_team: targetTeam,
+            admin_emp_id: currentUser ? currentUser.emp_id : ''
+          })
+        });
+
+        closeModal('settlementImportProgressModal');
+
+        const data = await res.json().catch(() => ({}));
+
+      // 2. 결과 / 실패 사유 모달 표시 (요구사항 4)
+      const banner = document.getElementById('importResultBanner');
+      const statTotal = document.getElementById('importStatTotal');
+      const statProcessed = document.getElementById('importStatProcessed');
+      const statSkipped = document.getElementById('importStatSkipped');
+      const statErrors = document.getElementById('importStatErrors');
+      const deptRuleBox = document.getElementById('importResultDeptRuleBox');
+      const errSection = document.getElementById('importErrorDetailsSection');
+      const errList = document.getElementById('importErrorDetailsList');
+
+      if (statTotal) statTotal.textContent = data.total_rows || 0;
+      if (statProcessed) statProcessed.textContent = data.processed_count || 0;
+      if (statSkipped) statSkipped.textContent = data.skipped_other_dept_count || 0;
+      if (statErrors) statErrors.textContent = data.error_count || (res.ok ? 0 : 1);
+
+      if (res.ok && data.success !== false) {
+        if (banner) {
+          banner.style.background = '#ecfdf5';
+          banner.style.color = '#047857';
+          banner.style.border = '1px solid #10b981';
+          banner.innerHTML = `<span>✅</span> <span>정산표 엑셀 가져오기가 성공적으로 완료되었습니다!</span>`;
+        }
+        if (deptRuleBox) {
+          if (targetTeam) {
+            deptRuleBox.innerHTML = `🛡️ <b>부서 데이터 격리 적용</b>: 선택된 부서(<b>${escapeHtml(targetTeam)}</b>)의 <b>${data.processed_count || 0}건</b>만 반영되었으며, 타 부서 <b>${data.skipped_other_dept_count || 0}건</b>의 정보는 100% 변경 없이 안전하게 보존되었습니다.`;
+          } else {
+            deptRuleBox.innerHTML = `🛡️ <b>전체 부서 데이터 반영</b>: 엑셀 파일 내 모든 부서의 데이터가 수집/반영되었습니다.`;
+          }
+        }
+        showToast('엑셀 정산 데이터가 정상 반영되었습니다!');
+        loadSettlementSummary();
+        loadAdminData();
+      } else {
+        if (banner) {
+          banner.style.background = '#fef2f2';
+          banner.style.color = '#b91c1c';
+          banner.style.border = '1px solid #ef4444';
+          banner.innerHTML = `<span>❌</span> <span>정산표 엑셀 가져오기 실패</span>`;
+        }
+        if (deptRuleBox) {
+          const detailMsg = data.detail || data.message || '파일 처리 중 오류가 발생했습니다.';
+          deptRuleBox.innerHTML = `⚠️ <b>실패 사유</b>: <span style="color:#b91c1c;">${escapeHtml(detailMsg)}</span>`;
+        }
+        showToast(data.detail || '가져오기 실패', 'error');
+      }
+
+      const errors = data.errors || [];
+      if (errors.length > 0 && errSection && errList) {
+        errSection.style.display = 'block';
+        errList.innerHTML = errors.map(err => `<div>• ${escapeHtml(err)}</div>`).join('');
+      } else if (errSection) {
+        errSection.style.display = 'none';
+      }
+
+      openModal('settlementImportResultModal');
+    } catch (err) {
+      console.error('Import error:', err);
+      closeModal('settlementImportProgressModal');
+      showToast('엑셀 업로드 통신 오류가 발생했습니다.', 'error');
+    }
+    };
+    reader.readAsDataURL(file);
   });
 }
 

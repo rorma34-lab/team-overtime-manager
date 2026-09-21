@@ -81,6 +81,7 @@ class TeamDeleteRequest(BaseModel):
     admin_emp_id: str = Field(..., description="슈퍼관리자 사원번호")
 
 class BackupSaveRequest(BaseModel):
+    name: Optional[str] = Field(None, description="백업 커스텀 명칭")
     description: Optional[str] = Field("", description="백업 상세 설명")
     admin_emp_id: Optional[str] = Field(None, description="관리자 사원번호")
 

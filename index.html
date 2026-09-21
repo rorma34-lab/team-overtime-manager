@@ -37,7 +37,7 @@
         <div class="brand-logo">⏰</div>
         <div>
           <span class="brand-title">스마트 특근 관리</span>
-          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.46</span>
+          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.47</span>
           <span class="brand-subtitle">Smart Overtime System</span>
         </div>
       </div>
@@ -687,9 +687,15 @@
                   * 산정 기준: <b>일반휴일 특근일수 - 대체휴일 사용일수 = 실제 특근일</b> (대체근무 및 법정휴일은 자동 제외)
                 </span>
               </div>
-              <button class="btn btn-primary btn-sm" id="exportSummaryExcelBtn">
-                📥 정산표 엑셀(.xlsx) 내보내기
-              </button>
+              <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                <button class="btn btn-secondary btn-sm" id="importSummaryExcelBtn" title="선택된 부서의 정산표 엑셀 데이터를 업로드하여 반영합니다">
+                  📤 정산표 엑셀 가져오기
+                </button>
+                <input type="file" id="summaryExcelFileInput" accept=".xlsx, .xls" style="display: none;" />
+                <button class="btn btn-primary btn-sm" id="exportSummaryExcelBtn">
+                  📥 정산표 엑셀(.xlsx) 내보내기
+                </button>
+              </div>
             </div>
 
             <!-- 정산 기간 필터 바 -->
@@ -1161,21 +1167,39 @@
       </div>
       <div class="modal-body" style="max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1.25rem;">
         
-        <!-- v1.46 (Latest) -->
+        <!-- v1.47 (Latest) -->
         <div style="background: var(--bg-card); border: 2px solid #0d9488; padding: 1.1rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
           <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-            <span style="background: #0d9488; color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.46</span>
+            <span style="background: #0d9488; color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.47</span>
             <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-main);">최신 정식 릴리즈 (Latest)</span>
             <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-21</span>
           </div>
           <div style="font-weight: 800; color: #0d9488; margin-bottom: 0.5rem; font-size: 0.88rem;">
+            🏢 v1.47 부서선택 인원 필터링, 정산 엑셀 가져오기 및 부서 데이터 안전 격리
+          </div>
+          <ul style="margin-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.84rem; line-height: 1.6; color: var(--text-main);">
+            <li><b>관리자 팀원 특근/휴무 신청 인원 드롭다운 부서 필터링</b>: 부서 현황에서 선택된 부서의 팀원만 신청 대상 인원 선택 목록에 표시</li>
+            <li><b>팀원 특근/휴무 신청 기본 날짜 설정</b>: 신청 모달 오픈 시 시작일과 종료일이 자동으로 현재 날짜(오늘)로 기본 세팅</li>
+            <li><b>특근현황_일자별개인별정산 엑셀 가져오기 신설</b>: [📤 정산표 엑셀 가져오기] 버튼 추가 및 openpyxl 기반 고성능 업로드 API 탑재</li>
+            <li><b>부서 데이터 완전 격리 및 타 부서 보호</b>: 내보내기/가져오기 시 부서 현황에서 선택된 부서만 처리되며, 타 부서 정보는 100% 변경 없이 안전 보존</li>
+            <li><b>실시간 실행 진행 및 상세 결과/실패 사유 안내 모달</b>: 가져오기 진행 중 동적 스피너 및 성공/실패 시 상세 사유·원인과 처리/스킵 행 수 시각화 제공</li>
+          </ul>
+        </div>
+
+        <!-- v1.46 -->
+        <div style="background: var(--bg-subtle); border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-md);">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+            <span style="background: var(--text-muted); color: #fff; font-size: 0.8rem; font-weight: 700; padding: 2px 10px; border-radius: 9999px;">v1.46</span>
+            <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-main);">정식 릴리즈</span>
+            <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-21</span>
+          </div>
+          <div style="font-weight: 800; color: var(--text-muted); margin-bottom: 0.5rem; font-size: 0.88rem;">
             🖥️ v1.46 와이드 레이아웃, 검토완료 후 확정 잠금, 캘린더 클릭 상세 패널 오류 수정
           </div>
           <ul style="margin-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.84rem; line-height: 1.6; color: var(--text-main);">
             <li><b>와이드 모니터 레이아웃 최적화</b>: .nav-container 및 .main-wrapper를 1560px → 1680px(1600px+) → 1820px(1920px+)로 단계 확장하여 넓은 화면에서 여백 없이 시원한 UI 구성</li>
-            <li><b>검토완료 후 확정 잠금(Lock)</b>: 관리자가 '검토완료'를 누른 건은 확정/확정취소 버튼이 비활성화되며, 변경하려면 '검토취소' 후 수정 가능 (프론트·백엔드 이중 방어)</li>
-            <li><b>캘린더 날짜 클릭 시 하단 패널 미표시 오류 수정</b>: showDailyWorkers()에서 isFin/isRev 변수 누락(ReferenceError) 버그 해결 및 부드러운 스크롤 이동 추가</li>
-            <li><b>사용자 및 관리자 매뉴얼 v1.46 전면 개정</b>: 와이드 레이아웃·확정잠금·캘린더 수정 내용 반영 및 3중 경로 PPTX 자동 동기화</li>
+            <li><b>검토완료 후 확정 잠금(Lock)</b>: 관리자가 '검토완료'를 누른 건은 확정/확정취소 버튼이 비활성화되며, 변경하려면 '검토취소' 후 수정 가능</li>
+            <li><b>캘린더 날짜 클릭 시 하단 패널 미표시 오류 수정</b>: showDailyWorkers()에서 isFin/isRev 변수 누락(ReferenceError) 버그 해결 및 스크롤 이동 개선</li>
           </ul>
         </div>
 
@@ -1492,6 +1516,72 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-primary btn-sm" data-close="versionModal">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5-1. 정산표 엑셀 가져오기 진행중 안내 모달 -->
+  <div class="modal-overlay" id="settlementImportProgressModal" style="z-index: 10000;">
+    <div class="modal-content" style="max-width: 460px; text-align: center; padding: 2rem 1.5rem;">
+      <div style="font-size: 3rem; margin-bottom: 0.75rem; animation: pulse 1.5s infinite;">⏳</div>
+      <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-main); margin-bottom: 0.5rem;" id="importProgressTitle">
+        정산표 엑셀 가져오기 진행 중...
+      </h3>
+      <p style="font-size: 0.86rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 1.25rem;" id="importProgressMessage">
+        엑셀 데이터를 검증하고 부서별 수집 범위를 확인하고 있습니다.<br>잠시만 기다려 주세요.
+      </p>
+      <div style="background: var(--bg-subtle); padding: 0.75rem; border-radius: var(--radius-sm); border: 1px dashed var(--border-color); display: inline-flex; align-items: center; gap: 0.5rem;">
+        <span style="font-size: 0.82rem; font-weight: 700; color: var(--primary);" id="importProgressDeptBadge">🏢 부서 현황: 전체 부서</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5-2. 정산표 엑셀 가져오기 결과 및 실패사유 안내 모달 -->
+  <div class="modal-overlay" id="settlementImportResultModal" style="z-index: 10001;">
+    <div class="modal-content" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="importResultModalTitle">📋 가져오기 결과 안내</h3>
+        <button class="modal-close" data-close="settlementImportResultModal">&times;</button>
+      </div>
+      <div class="modal-body" style="max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem;">
+        <div id="importResultBanner" style="padding: 1rem; border-radius: var(--radius-md); font-weight: 700; display: flex; align-items: center; gap: 0.6rem;">
+          <!-- JS로 성공/실패 배너 렌더링 -->
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; text-align: center;">
+          <div style="background: var(--bg-subtle); padding: 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+            <div style="font-size: 0.75rem; color: var(--text-muted);">총 읽은 행</div>
+            <div style="font-size: 1.1rem; font-weight: 800; color: var(--text-main);" id="importStatTotal">0</div>
+          </div>
+          <div style="background: #ecfdf5; padding: 0.6rem; border-radius: var(--radius-sm); border: 1px solid #10b981;">
+            <div style="font-size: 0.75rem; color: #047857;">성공/반영</div>
+            <div style="font-size: 1.1rem; font-weight: 800; color: #047857;" id="importStatProcessed">0</div>
+          </div>
+          <div style="background: #fffbeb; padding: 0.6rem; border-radius: var(--radius-sm); border: 1px solid #f59e0b;">
+            <div style="font-size: 0.75rem; color: #b45309;">타 부서 스킵</div>
+            <div style="font-size: 1.1rem; font-weight: 800; color: #b45309;" id="importStatSkipped">0</div>
+          </div>
+          <div style="background: #fef2f2; padding: 0.6rem; border-radius: var(--radius-sm); border: 1px solid #ef4444;">
+            <div style="font-size: 0.75rem; color: #b91c1c;">오류/스킵</div>
+            <div style="font-size: 1.1rem; font-weight: 800; color: #b91c1c;" id="importStatErrors">0</div>
+          </div>
+        </div>
+
+        <div id="importResultDeptRuleBox" style="font-size: 0.82rem; background: var(--bg-subtle); padding: 0.75rem; border-radius: var(--radius-sm); color: var(--text-main); border-left: 4px solid var(--primary);">
+          <!-- 부서 격리 결과 문구 -->
+        </div>
+
+        <div id="importErrorDetailsSection" style="display: none;">
+          <div style="font-size: 0.85rem; font-weight: 700; color: #b91c1c; margin-bottom: 0.4rem;">
+            ⚠️ 상세 실패/오류 사유 목록:
+          </div>
+          <div id="importErrorDetailsList" style="background: #fef2f2; border: 1px solid #fca5a5; padding: 0.75rem; border-radius: var(--radius-sm); font-size: 0.8rem; color: #991b1b; max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.35rem;">
+            <!-- 오류 항목 렌더링 -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary btn-sm" data-close="settlementImportResultModal">확인 및 닫기</button>
       </div>
     </div>
   </div>

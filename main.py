@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Optional, List
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query, Response, Request
+from fastapi import FastAPI, HTTPException, Query, Response, Request, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +18,7 @@ import qrcode
 from database import (
     init_db, get_db_connection, log_audit, create_backup, DB_PATH,
     get_all_teams, create_team, delete_team, log_access_event,
-    get_cached_user_role, invalidate_user_role_cache
+    is_using_turso, get_db_mode
 )
 from schemas import (
     UserLoginRequest, UserRegisterRequest, UserUpdateRequest,
@@ -43,8 +43,8 @@ STATIC_DIR = BASE_DIR / "static"
 WEB_BACKUP_DIR = BASE_DIR / "data" / "web_backups"
 WEB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
+DEFAULT_EXTERNAL_URL = "https://internal-overtime.company.com"
 EXTERNAL_URL_FILE = BASE_DIR / "data" / "external_url.txt"
-DEFAULT_EXTERNAL_URL = "https://overtime-system.trycloudflare.com"
 
 if not EXTERNAL_URL_FILE.exists():
     try:
@@ -53,7 +53,7 @@ if not EXTERNAL_URL_FILE.exists():
     except Exception:
         pass
 
-app = FastAPI(title="Team Overtime Manager", version="v1.46")
+app = FastAPI(title="Team Overtime Manager", version="v1.47")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -2016,6 +2016,207 @@ async def export_settlement(req: Request):
             "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
         }
     )
+
+@app.post("/api/overtimes/import-settlement")
+async def import_settlement(req: Request):
+    """
+    관리자모드 특근현황_일자별개인별정산 엑셀 가져오기 API (JSON base64 페이로드 지원)
+    - 선택된 부서(target_team)가 있는 경우 해당 부서 데이터만 처리
+    - 타 부서들의 데이터는 절대 변경되지 않고 안전하게 처리 제외 (skipped_other_dept_count)
+    """
+    try:
+        payload = await req.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="올바른 JSON 요청 데이터가 아닙니다.")
+
+    file_base64 = payload.get("file_base64", "")
+    target_team = payload.get("target_team", "") or ""
+    admin_emp_id = payload.get("admin_emp_id", "") or ""
+    filename = payload.get("filename", "import.xlsx")
+
+    if not file_base64:
+        raise HTTPException(status_code=400, detail="업로드된 엑셀 파일 데이터가 없습니다.")
+
+    try:
+        contents = base64.b64decode(file_base64)
+        excel_bytes = io.BytesIO(contents)
+        import openpyxl
+        wb = openpyxl.load_workbook(excel_bytes, data_only=True)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"엑셀 파일을 해석할 수 없습니다: {str(e)}")
+
+    sheet_names = wb.sheetnames
+    target_sheet = None
+    for name in ["휴일일자별_특근현황", "특근신청_전체원장", "개인별_실특근_정산표"]:
+        if name in sheet_names:
+            target_sheet = wb[name]
+            break
+    if not target_sheet:
+        target_sheet = wb.active
+
+    rows_data = list(target_sheet.iter_rows(values_only=True))
+    if not rows_data or len(rows_data) < 2:
+        raise HTTPException(status_code=400, detail="엑셀 파일에 처리할 데이터 행이 없습니다.")
+
+    header_idx = -1
+    col_map = {}
+    for idx, r in enumerate(rows_data[:10]):
+        if not r:
+            continue
+        row_str = [str(cell or '').strip() for cell in r]
+        for c_i, val in enumerate(row_str):
+            if val in ["사번", "사원번호", "emp_id"]:
+                header_idx = idx
+                break
+        if header_idx != -1:
+            break
+
+    if header_idx == -1:
+        header_idx = 0
+
+    header_row = [str(cell or '').strip() for cell in rows_data[header_idx]]
+    for c_i, name in enumerate(header_row):
+        col_map[name] = c_i
+
+    def get_val(row, aliases, default=""):
+        for a in aliases:
+            if a in col_map and col_map[a] < len(row):
+                v = row[col_map[a]]
+                if v is not None and str(v).strip() != "":
+                    return str(v).strip()
+        return default
+
+    data_rows = rows_data[header_idx + 1:]
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    total_rows = 0
+    processed_count = 0
+    skipped_other_dept = 0
+    error_count = 0
+    errors = []
+
+    cursor.execute("SELECT emp_id, name, team FROM users")
+    db_users = {r["emp_id"]: dict(r) for r in cursor.fetchall()}
+
+    target_team_clean = (target_team or "").strip()
+
+    try:
+        with conn:
+            for r_num, row in enumerate(data_rows, start=header_idx + 2):
+                if not any(cell is not None and str(cell).strip() != '' for cell in row):
+                    continue
+
+                total_rows += 1
+                emp_id = get_val(row, ["사번", "사원번호", "emp_id"])
+                user_name = get_val(row, ["성명", "이름", "name"])
+                team = get_val(row, ["소속팀", "부서", "team"])
+
+                if not emp_id:
+                    errors.append(f"[{r_num}행] 사원번호(사번) 정보가 누락되어 스킵되었습니다.")
+                    error_count += 1
+                    continue
+
+                user_info = db_users.get(emp_id)
+                actual_team = team or (user_info["team"] if user_info else "")
+
+                # ★ 부서 현황에서 선택된 부서만 처리하고, 타 부서 데이터는 스킵
+                if target_team_clean and actual_team and actual_team != target_team_clean:
+                    skipped_other_dept += 1
+                    continue
+
+                # 신규 사용자인 경우 users 테이블에 자동 등록 (FK 제약조건 보호)
+                if not user_info:
+                    now_created = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    new_user_team = actual_team or target_team_clean or "미지정"
+                    new_user_name = user_name or emp_id
+                    cursor.execute("""
+                        INSERT OR IGNORE INTO users (emp_id, name, team, position, is_admin, is_super, created_at)
+                        VALUES (?, ?, ?, '팀원', 0, 0, ?)
+                    """, (emp_id, new_user_name, new_user_team, now_created))
+                    user_info = {"emp_id": emp_id, "name": new_user_name, "team": new_user_team}
+                    db_users[emp_id] = user_info
+                    actual_team = new_user_team
+
+                start_date = get_val(row, ["휴일날짜", "시작일", "start_date"])
+                end_date = get_val(row, ["종료일", "end_date"]) or start_date
+                category = get_val(row, ["특근분류", "분류", "category"], "일반휴일")
+                project_no = get_val(row, ["프로젝트 번호", "프로젝트번호", "project_no"])
+                location = get_val(row, ["근무 장소", "근무장소", "location"])
+                reason = get_val(row, ["특근 사유", "사유", "reason"])
+                status_str = get_val(row, ["진행단계", "상태", "status"])
+                bonus_str = get_val(row, ["보너스 부여", "보너스", "bonus_granted"])
+
+                bonus_val = 1 if bonus_str in ["1", "Y", "예", "부여", "True"] else 0
+                is_confirmed = 1 if status_str in ["승인", "확정", "검토완료", "검토", "1"] else 0
+                now_iso = datetime.now().isoformat()
+
+                if start_date:
+                    cursor.execute("""
+                        SELECT id FROM overtimes 
+                        WHERE emp_id = ? AND start_date = ? AND category = ?
+                    """, (emp_id, start_date, category))
+                    existing = cursor.fetchone()
+
+                    if existing:
+                        cursor.execute("""
+                            UPDATE overtimes 
+                            SET user_name = COALESCE(NULLIF(?, ''), user_name),
+                                team = COALESCE(NULLIF(?, ''), team),
+                                end_date = ?,
+                                project_no = ?,
+                                location = ?,
+                                reason = ?,
+                                is_confirmed = ?,
+                                bonus_granted = ?,
+                                updated_at = ?
+                            WHERE id = ?
+                        """, (user_name, actual_team, end_date, project_no, location, reason, is_confirmed, bonus_val, now_iso, existing["id"]))
+                    else:
+                        cursor.execute("""
+                            INSERT INTO overtimes (
+                                emp_id, user_name, team, category, start_date, end_date,
+                                project_no, location, reason, is_confirmed, bonus_granted,
+                                created_at, updated_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            emp_id, user_name or (user_info["name"] if user_info else emp_id),
+                            actual_team or "미지정", category, start_date, end_date,
+                            project_no, location, reason, is_confirmed, bonus_val,
+                            now_iso, now_iso
+                        ))
+                    processed_count += 1
+                else:
+                    processed_count += 1
+
+    except Exception as ex:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"가져오기 DB 처리 중 오류 발생: {str(ex)}")
+
+    conn.close()
+
+    if total_rows > 0 and processed_count == 0 and skipped_other_dept > 0:
+        return JSONResponse(status_code=400, content={
+            "success": False,
+            "message": f"선택된 부서('{target_team_clean}')에 해당하는 데이터가 없습니다. (타 부서 {skipped_other_dept}건 제외됨)",
+            "total_rows": total_rows,
+            "processed_count": 0,
+            "skipped_other_dept_count": skipped_other_dept,
+            "error_count": error_count,
+            "errors": errors or [f"파일 내 모든 {skipped_other_dept}건이 선택된 부서('{target_team_clean}')와 달라 제외되었습니다."],
+            "target_team": target_team_clean
+        })
+
+    return {
+        "success": True,
+        "message": f"정산표 엑셀 가져오기가 완료되었습니다.",
+        "total_rows": total_rows,
+        "processed_count": processed_count,
+        "skipped_other_dept_count": skipped_other_dept,
+        "error_count": error_count,
+        "errors": errors,
+        "target_team": target_team_clean
+    }
 
 @app.post("/api/overtimes/export")
 def export_overtimes(req: ExportRequest):
