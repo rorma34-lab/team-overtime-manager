@@ -24,7 +24,10 @@ from schemas import (
     UserLoginRequest, UserRegisterRequest, UserUpdateRequest,
     OvertimeCreateRequest, OvertimeUpdateRequest, OvertimeDeleteRequest,
     OvertimeConfirmRequest, OvertimePreDeductRequest, ExportRequest, TeamCreateRequest,
-    BackupSaveRequest, BackupLoadRequest
+    BackupSaveRequest, BackupLoadRequest,
+    OvertimeFinalizeRequest, OvertimeBatchFinalizeRequest,
+    OvertimeReviewRequest, OvertimeBatchReviewRequest,
+    SuggestionCreateRequest, SuggestionReplyRequest
 )
 from urllib.parse import quote
 from exporter import generate_overtime_excel, generate_settlement_excel
@@ -35,7 +38,17 @@ STATIC_DIR = BASE_DIR / "static"
 WEB_BACKUP_DIR = BASE_DIR / "data" / "web_backups"
 WEB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Team Overtime Manager", version="v1.43")
+EXTERNAL_URL_FILE = BASE_DIR / "data" / "external_url.txt"
+DEFAULT_EXTERNAL_URL = "https://overtime-system.trycloudflare.com"
+
+if not EXTERNAL_URL_FILE.exists():
+    try:
+        EXTERNAL_URL_FILE.parent.mkdir(parents=True, exist_ok=True)
+        EXTERNAL_URL_FILE.write_text(DEFAULT_EXTERNAL_URL, encoding="utf-8")
+    except Exception:
+        pass
+
+app = FastAPI(title="Team Overtime Manager", version="v1.44")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -122,23 +135,63 @@ def get_local_ips():
 
 # ----------------- 시스템 & 접속 API -----------------
 
+def get_current_external_url(request: Optional[Request] = None) -> str:
+    """외부 접속망 URL 획득 (우선순위: 환경변수 > 저장된 파일 > 요청 Host/헤더 > 기본 Cloudflare 도메인)"""
+    env_url = os.environ.get("EXTERNAL_URL", "").strip()
+    if env_url:
+        return env_url
+
+    if EXTERNAL_URL_FILE.exists():
+        try:
+            val = EXTERNAL_URL_FILE.read_text(encoding="utf-8").strip()
+            if val:
+                return val
+        except Exception:
+            pass
+
+    if request:
+        proto = request.headers.get("x-forwarded-proto", "https")
+        host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
+        if host and not any(host.startswith(h) for h in ["localhost", "127.0.0.1", "192.168.", "10.", "172."]):
+            return f"{proto}://{host}"
+
+    return DEFAULT_EXTERNAL_URL
+
 @app.get("/api/system/info")
-def get_system_info(custom_url: Optional[str] = None):
-    """서버 접속 정보 및 모바일 스캔용 QR 코드 제공 (외부망 접속 URL 지원)"""
+def get_system_info(request: Request, custom_url: Optional[str] = None):
+    """서버 접속 정보 및 모바일 스캔용 QR 코드 제공 (외부망 접속 URL 기본 제공 및 영구 저장)"""
     ips = get_local_ips()
     primary_ip = ips[0]
     local_url = f"http://{primary_ip}:8000"
-    target_url = custom_url.strip() if (custom_url and custom_url.strip()) else local_url
-    
-    # QR코드 생성
+
+    # 외부 접속 URL 설정 및 영구 저장
+    if custom_url and custom_url.strip():
+        target_url = custom_url.strip()
+        try:
+            EXTERNAL_URL_FILE.write_text(target_url, encoding="utf-8")
+        except Exception as e:
+            print(f"[Warning] 외부 URL 저장 실패: {e}")
+    else:
+        target_url = get_current_external_url(request)
+
+    # QR코드 생성 (외부망 접속 URL 기준)
     qr = qrcode.QRCode(version=1, box_size=6, border=2)
     qr.add_data(target_url)
     qr.make(fit=True)
     img = qr.make_image(fill_color="#0f172a", back_color="#ffffff")
-    
+
     buf = io.BytesIO()
     img.save(buf, format="PNG")
-    qr_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    qr_bytes = buf.getvalue()
+    qr_b64 = base64.b64encode(qr_bytes).decode("utf-8")
+
+    # external_qr.png 루트 및 static에 동기화 저장
+    try:
+        (BASE_DIR / "external_qr.png").write_bytes(qr_bytes)
+        if STATIC_DIR.exists():
+            (STATIC_DIR / "external_qr.png").write_bytes(qr_bytes)
+    except Exception:
+        pass
 
     from database import get_db_mode, is_using_turso
     return {
@@ -148,6 +201,8 @@ def get_system_info(custom_url: Optional[str] = None):
         "is_turso": is_using_turso(),
         "storage": "Turso Cloud DB (영구 보존)" if is_using_turso() else "Local SQLite (로컬 저장소)",
         "local_ips": ips,
+        "local_url": local_url,
+        "external_url": target_url,
         "primary_url": target_url,
         "is_custom": bool(custom_url and custom_url.strip()),
         "qr_code_base64": f"data:image/png;base64,{qr_b64}",
@@ -1126,6 +1181,10 @@ def get_overtime_summary(
                 "pre_deduct_remaining": 0,
                 "actual_overtime_days": 0,
                 "bonus_count": 0,
+                "applied_days": 0,
+                "approved_days": 0,
+                "finalized_days": 0,
+                "reviewed_days": 0,
                 "records_count": 0
             }
 
@@ -1141,6 +1200,21 @@ def get_overtime_summary(
             u["overtime_days"] += days
         elif cat in ["대체휴무", "대체휴일"]:
             u["sub_holiday_used"] += days
+
+        # v1.44: 4단계 진행상태별 일수 집계
+        is_conf = bool(r.get("is_confirmed", 0))
+        is_fin = bool(r.get("is_finalized", 0))
+        is_rev = bool(r.get("is_reviewed", 0))
+
+        if cat in ["일반휴일", "법정휴일", "대체근무"]:
+            if is_rev:
+                u["reviewed_days"] += days
+            elif is_fin:
+                u["finalized_days"] += days
+            elif is_conf:
+                u["approved_days"] += days
+            else:
+                u["applied_days"] += days
 
         # 요구사항 1-1: 총 특근일수 = 대체근무 + 법정휴일 + 일반휴일 (대체휴무 제외)
         u["total_days"] = int(u["excluded_sub_days"] + u["excluded_legal_days"] + u["overtime_days"])
@@ -1177,7 +1251,11 @@ def get_overtime_summary(
                 "sub_holiday_used": 0,
                 "pre_deduct_days": 0,
                 "actual_overtime_days": 0,
-                "bonus_count": 0
+                "bonus_count": 0,
+                "applied_days": 0,
+                "approved_days": 0,
+                "finalized_days": 0,
+                "reviewed_days": 0
             }
         tm = team_summary[t]
         tm["members"].add(emp_id)
@@ -1187,6 +1265,16 @@ def get_overtime_summary(
             tm["overtime_days"] += days
         elif cat in ["대체휴무", "대체휴일"]:
             tm["sub_holiday_used"] += days
+
+        if cat in ["일반휴일", "법정휴일", "대체근무"]:
+            if is_rev:
+                tm["reviewed_days"] += days
+            elif is_fin:
+                tm["finalized_days"] += days
+            elif is_conf:
+                tm["approved_days"] += days
+            else:
+                tm["applied_days"] += days
 
         tm["total_days"] = int(tm["excluded_days"] + tm["overtime_days"])
         if int(r.get("bonus_granted") or 0) == 1:
@@ -1538,6 +1626,338 @@ def batch_confirm_overtimes(payload: dict):
 
     return {"message": f"{len(ids)}건이 일괄 처리되었습니다."}
 
+# ----------------- v1.44: 특근 완료 확정 및 검토완료 API -----------------
+
+@app.post("/api/overtimes/{item_id}/finalize")
+def finalize_overtime(item_id: int, req: OvertimeFinalizeRequest):
+    """실제 특근 완료 시 사원 또는 관리자가 확정 상태 피드백 (1: 특근완료 확정, 0: 확정 취소)"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM overtimes WHERE id = ?", (item_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="해당 특근 내역을 찾을 수 없습니다.")
+
+    prev_data = dict(row)
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # 권한 검증: 본인 또는 관리자만 확정 가능
+    caller = get_cached_user_role(req.emp_id.strip())
+    is_admin = caller and (caller.get("is_super") == 1 or caller.get("is_admin") == 1)
+    is_owner = (prev_data["emp_id"] == req.emp_id.strip())
+
+    if not (is_admin or is_owner):
+        conn.close()
+        raise HTTPException(status_code=403, detail="본인 또는 관리자만 특근 확정을 처리할 수 있습니다.")
+
+    if is_admin and caller.get("is_super") != 1 and not is_owner:
+        if prev_data["team"] != caller.get("team"):
+            conn.close()
+            raise HTTPException(status_code=403, detail="팀관리자는 본인 소속팀의 특근만 확정할 수 있습니다.")
+
+    # 이미 관리자 검토완료된 건은 사원이 임의로 확정 취소 불가
+    if req.is_finalized == 0 and prev_data.get("is_reviewed") == 1 and not is_admin:
+        conn.close()
+        raise HTTPException(status_code=400, detail="이미 관리자 검토완료된 특근은 관리자만 취소할 수 있습니다.")
+
+    caller_name = caller["name"] if caller else req.emp_id.strip()
+
+    if req.is_finalized == 1:
+        confirmed_by = prev_data.get("confirmed_by") or f"{caller_name}({req.emp_id.strip()})"
+        confirmed_at = prev_data.get("confirmed_at") or now_str
+        cursor.execute("""
+        UPDATE overtimes SET is_confirmed = 1, confirmed_by = ?, confirmed_at = ?,
+                             is_finalized = 1, finalized_by = ?, finalized_at = ?, updated_at = ?
+        WHERE id = ?
+        """, (confirmed_by, confirmed_at, f"{caller_name}({req.emp_id.strip()})", now_str, now_str, item_id))
+        action_name = "특근확정"
+    else:
+        cursor.execute("""
+        UPDATE overtimes SET is_finalized = 0, finalized_by = NULL, finalized_at = NULL,
+                             is_reviewed = 0, reviewed_by = NULL, reviewed_at = NULL, updated_at = ?
+        WHERE id = ?
+        """, (now_str, item_id))
+        action_name = "확정취소"
+
+    conn.commit()
+    cursor.execute("SELECT * FROM overtimes WHERE id = ?", (item_id,))
+    new_data = dict(cursor.fetchone())
+    conn.close()
+
+    log_audit(
+        overtime_id=item_id,
+        action=action_name,
+        changed_by=req.emp_id.strip(),
+        changed_by_name=caller_name,
+        previous_data=prev_data,
+        new_data=new_data
+    )
+
+    return {"message": f"특근 상태가 '{action_name}'(으)로 변경되었습니다.", "overtime": new_data}
+
+
+@app.post("/api/overtimes/batch-finalize")
+def batch_finalize_overtimes(payload: OvertimeBatchFinalizeRequest):
+    """선택된 다중 특근 일괄 확정/취소"""
+    ids = payload.ids
+    emp_id = payload.emp_id.strip()
+    is_finalized = payload.is_finalized
+
+    if not ids:
+        raise HTTPException(status_code=400, detail="선택된 항목이 없습니다.")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    caller = get_cached_user_role(emp_id)
+    is_admin = caller and (caller.get("is_super") == 1 or caller.get("is_admin") == 1)
+    caller_name = caller["name"] if caller else emp_id
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    processed = 0
+    for itm_id in ids:
+        cursor.execute("SELECT * FROM overtimes WHERE id = ?", (itm_id,))
+        ot = cursor.fetchone()
+        if not ot:
+            continue
+        ot_dict = dict(ot)
+        is_owner = (ot_dict["emp_id"] == emp_id)
+        if not (is_admin or is_owner):
+            continue
+        if is_admin and caller.get("is_super") != 1 and not is_owner:
+            if ot_dict["team"] != caller.get("team"):
+                continue
+
+        if is_finalized == 1:
+            confirmed_by = ot_dict.get("confirmed_by") or f"{caller_name}({emp_id})"
+            confirmed_at = ot_dict.get("confirmed_at") or now_str
+            cursor.execute("""
+            UPDATE overtimes SET is_confirmed = 1, confirmed_by = ?, confirmed_at = ?,
+                                 is_finalized = 1, finalized_by = ?, finalized_at = ?, updated_at = ?
+            WHERE id = ?
+            """, (confirmed_by, confirmed_at, f"{caller_name}({emp_id})", now_str, now_str, itm_id))
+        else:
+            if ot_dict.get("is_reviewed") == 1 and not is_admin:
+                continue
+            cursor.execute("""
+            UPDATE overtimes SET is_finalized = 0, finalized_by = NULL, finalized_at = NULL,
+                                 is_reviewed = 0, reviewed_by = NULL, reviewed_at = NULL, updated_at = ?
+            WHERE id = ?
+            """, (now_str, itm_id))
+        processed += 1
+
+    conn.commit()
+    conn.close()
+    return {"message": f"{processed}건의 특근이 성공적으로 일괄 확정/취소 처리되었습니다."}
+
+
+@app.post("/api/overtimes/{item_id}/review")
+def review_overtime(item_id: int, req: OvertimeReviewRequest):
+    """관리자가 확정된 특근에 대해 최종 검토완료 처리 (1: 검토완료, 0: 검토 취소)"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM overtimes WHERE id = ?", (item_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="해당 특근 내역을 찾을 수 없습니다.")
+
+    prev_data = dict(row)
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # 관리자 권한 필수
+    cursor.execute("SELECT name, is_super, is_admin, team FROM users WHERE emp_id = ?", (req.admin_emp_id.strip(),))
+    u_row = cursor.fetchone()
+    if not u_row or (u_row["is_super"] != 1 and u_row["is_admin"] != 1):
+        conn.close()
+        raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다.")
+
+    if u_row["is_super"] != 1:
+        if prev_data["team"] != u_row["team"]:
+            conn.close()
+            raise HTTPException(status_code=403, detail=f"팀관리자는 본인 소속팀({u_row['team']})의 특근만 검토할 수 있습니다.")
+
+    admin_name = u_row["name"] if u_row else req.admin_emp_id.strip()
+
+    if req.is_reviewed == 1:
+        confirmed_by = prev_data.get("confirmed_by") or f"{admin_name}({req.admin_emp_id.strip()})"
+        confirmed_at = prev_data.get("confirmed_at") or now_str
+        finalized_by = prev_data.get("finalized_by") or f"{admin_name}({req.admin_emp_id.strip()})"
+        finalized_at = prev_data.get("finalized_at") or now_str
+        cursor.execute("""
+        UPDATE overtimes SET is_confirmed = 1, confirmed_by = ?, confirmed_at = ?,
+                             is_finalized = 1, finalized_by = ?, finalized_at = ?,
+                             is_reviewed = 1, reviewed_by = ?, reviewed_at = ?, updated_at = ?
+        WHERE id = ?
+        """, (confirmed_by, confirmed_at, finalized_by, finalized_at, f"{admin_name}({req.admin_emp_id.strip()})", now_str, now_str, item_id))
+        action_name = "검토완료"
+    else:
+        cursor.execute("""
+        UPDATE overtimes SET is_reviewed = 0, reviewed_by = NULL, reviewed_at = NULL, updated_at = ?
+        WHERE id = ?
+        """, (now_str, item_id))
+        action_name = "검토취소"
+
+    conn.commit()
+    cursor.execute("SELECT * FROM overtimes WHERE id = ?", (item_id,))
+    new_data = dict(cursor.fetchone())
+    conn.close()
+
+    log_audit(
+        overtime_id=item_id,
+        action=action_name,
+        changed_by=req.admin_emp_id.strip(),
+        changed_by_name=admin_name,
+        previous_data=prev_data,
+        new_data=new_data
+    )
+
+    return {"message": f"특근 상태가 '{action_name}'(으)로 변경되었습니다.", "overtime": new_data}
+
+
+@app.post("/api/overtimes/batch-review")
+def batch_review_overtimes(payload: OvertimeBatchReviewRequest):
+    """선택된 다중 특근 일괄 검토완료/취소"""
+    ids = payload.ids
+    admin_emp_id = payload.admin_emp_id.strip()
+    is_reviewed = payload.is_reviewed
+
+    if not ids:
+        raise HTTPException(status_code=400, detail="선택된 항목이 없습니다.")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, is_super, is_admin, team FROM users WHERE emp_id = ?", (admin_emp_id,))
+    u_row = cursor.fetchone()
+    if not u_row or (u_row["is_super"] != 1 and u_row["is_admin"] != 1):
+        conn.close()
+        raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다.")
+
+    is_team_admin = (u_row["is_super"] != 1)
+    admin_team = u_row["team"]
+    admin_name = u_row["name"] if u_row else admin_emp_id
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    processed = 0
+    for itm_id in ids:
+        cursor.execute("SELECT * FROM overtimes WHERE id = ?", (itm_id,))
+        ot = cursor.fetchone()
+        if not ot:
+            continue
+        ot_dict = dict(ot)
+        if is_team_admin and ot_dict["team"] != admin_team:
+            continue
+
+        if is_reviewed == 1:
+            confirmed_by = ot_dict.get("confirmed_by") or f"{admin_name}({admin_emp_id})"
+            confirmed_at = ot_dict.get("confirmed_at") or now_str
+            finalized_by = ot_dict.get("finalized_by") or f"{admin_name}({admin_emp_id})"
+            finalized_at = ot_dict.get("finalized_at") or now_str
+            cursor.execute("""
+            UPDATE overtimes SET is_confirmed = 1, confirmed_by = ?, confirmed_at = ?,
+                                 is_finalized = 1, finalized_by = ?, finalized_at = ?,
+                                 is_reviewed = 1, reviewed_by = ?, reviewed_at = ?, updated_at = ?
+            WHERE id = ?
+            """, (confirmed_by, confirmed_at, finalized_by, finalized_at, f"{admin_name}({admin_emp_id})", now_str, now_str, itm_id))
+        else:
+            cursor.execute("""
+            UPDATE overtimes SET is_reviewed = 0, reviewed_by = NULL, reviewed_at = NULL, updated_at = ?
+            WHERE id = ?
+            """, (now_str, itm_id))
+        processed += 1
+
+    conn.commit()
+    conn.close()
+    return {"message": f"{processed}건의 특근이 성공적으로 일괄 검토완료/취소 처리되었습니다."}
+
+
+# ----------------- v1.44: 무기명 건의사항란 (소통 게시판) API -----------------
+
+@app.get("/api/suggestions")
+def list_suggestions(category: Optional[str] = None, status: Optional[str] = None):
+    """무기명 건의사항 목록 조회 (사번/이름 완전 배제)"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    query = "SELECT id, category, title, content, status, admin_reply, reply_at, created_at FROM suggestions WHERE 1=1"
+    params = []
+    if category and category.strip():
+        query += " AND category = ?"
+        params.append(category.strip())
+    if status and status.strip():
+        query += " AND status = ?"
+        params.append(status.strip())
+    query += " ORDER BY id DESC"
+    cursor.execute(query, params)
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return {"status": "success", "suggestions": rows}
+
+
+@app.post("/api/suggestions")
+def create_suggestion(req: SuggestionCreateRequest):
+    """무기명 건의사항 등록 (100% 익명 보장, 사번/이름 저장 없음)"""
+    title = req.title.strip()
+    content = req.content.strip()
+    category = req.category.strip() or "불편사항"
+
+    if not title or not content:
+        raise HTTPException(status_code=400, detail="제목과 내용을 모두 입력해주세요.")
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    INSERT INTO suggestions (category, title, content, status, admin_reply, reply_at, created_at)
+    VALUES (?, ?, ?, '접수됨', '', '', ?)
+    """, (category, title, content, now_str))
+    conn.commit()
+    new_id = cursor.lastrowid
+    conn.close()
+    return {
+        "status": "success",
+        "message": "소중한 의견이 무기명으로 안전하게 등록되었습니다.",
+        "id": new_id
+    }
+
+
+@app.post("/api/suggestions/{s_id}/reply")
+def reply_suggestion(s_id: int, req: SuggestionReplyRequest):
+    """관리자 건의사항 답변 및 처리 상태 변경 (관리자 전용)"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT name, is_super, is_admin FROM users WHERE emp_id = ?", (req.admin_emp_id.strip(),))
+    u_row = cursor.fetchone()
+    if not u_row or (u_row["is_super"] != 1 and u_row["is_admin"] != 1):
+        conn.close()
+        raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다.")
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute("""
+    UPDATE suggestions SET status = ?, admin_reply = ?, reply_at = ?
+    WHERE id = ?
+    """, (req.status.strip() or "조치완료", req.admin_reply.strip(), now_str, s_id))
+    conn.commit()
+    conn.close()
+    return {"status": "success", "message": "건의사항 답변 및 상태가 저장되었습니다."}
+
+
+@app.delete("/api/suggestions/{s_id}")
+def delete_suggestion(s_id: int, admin_emp_id: str = Query(..., description="슈퍼관리자 사번")):
+    """건의사항 삭제 (슈퍼관리자 전용)"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT is_super FROM users WHERE emp_id = ?", (admin_emp_id.strip(),))
+    u_row = cursor.fetchone()
+    if not u_row or u_row["is_super"] != 1:
+        conn.close()
+        raise HTTPException(status_code=403, detail="슈퍼관리자만 삭제할 수 있습니다.")
+
+    cursor.execute("DELETE FROM suggestions WHERE id = ?", (s_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "success", "message": "건의사항이 삭제되었습니다."}
+
 @app.post("/api/overtimes/batch-delete")
 def batch_delete_overtimes(payload: dict):
     """선택된 다중 특근 일괄 삭제 (팀관리자는 본인 소속팀만 삭제 가능)"""
@@ -1670,11 +2090,28 @@ async def export_settlement(req: Request):
                 "pre_deduct_remaining": 0,
                 "actual_overtime_days": 0,
                 "bonus_count": 0,
-                "records_count": 0
+                "records_count": 0,
+                "applied_days": 0,
+                "approved_days": 0,
+                "finalized_days": 0,
+                "reviewed_days": 0
             }
         u = user_summary_map[emp_id]
         u["records_count"] += 1
         u["sub_holiday_used"] += sub_used
+
+        is_conf = int(r.get("is_confirmed") or 0)
+        is_fin = int(r.get("is_finalized") or 0)
+        is_rev = int(r.get("is_reviewed") or 0)
+        if is_rev == 1:
+            u["reviewed_days"] += days
+        elif is_fin == 1:
+            u["finalized_days"] += days
+        elif is_conf == 1:
+            u["approved_days"] += days
+        else:
+            u["applied_days"] += days
+
         if cat == "대체근무":
             u["excluded_sub_days"] += days
         elif cat == "법정휴일":
@@ -1749,6 +2186,10 @@ async def export_settlement(req: Request):
         t_info["actual_overtime_days"] = max(0.0, round(sum(u["actual_overtime_days"] for u in user_summary_map.values() if u["team"] == t_name), 1))
         t_info["bonus_count"] = sum(u.get("bonus_count", 0) for u in user_summary_map.values() if u["team"] == t_name)
         t_info["actual_overtime_with_bonus"] = max(0.0, round(sum(u.get("actual_overtime_with_bonus", 0.0) for u in user_summary_map.values() if u["team"] == t_name), 1))
+        t_info["applied_days"] = sum(u.get("applied_days", 0) for u in user_summary_map.values() if u["team"] == t_name)
+        t_info["approved_days"] = sum(u.get("approved_days", 0) for u in user_summary_map.values() if u["team"] == t_name)
+        t_info["finalized_days"] = sum(u.get("finalized_days", 0) for u in user_summary_map.values() if u["team"] == t_name)
+        t_info["reviewed_days"] = sum(u.get("reviewed_days", 0) for u in user_summary_map.values() if u["team"] == t_name)
         team_list.append(t_info)
     team_list.sort(key=lambda x: x["team"])
 
@@ -2307,7 +2748,7 @@ def download_user_manual():
     """사용자 모드 전용 매뉴얼 다운로드 (.pptx)"""
     if not USER_PPTX_PATH.exists():
         create_manual()
-    filename = "특근관리시스템_사용자_매뉴얼(v1.40).pptx"
+    filename = "특근관리시스템_사용자_매뉴얼(v1.44).pptx"
     encoded_filename = quote(filename)
     return FileResponse(
         str(USER_PPTX_PATH),
@@ -2320,7 +2761,7 @@ def download_admin_manual():
     """관리자 모드 전용 운영 매뉴얼 다운로드 (.pptx)"""
     if not ADMIN_PPTX_PATH.exists():
         create_manual()
-    filename = "특근관리시스템_관리자_운영매뉴얼(v1.40).pptx"
+    filename = "특근관리시스템_관리자_운영매뉴얼(v1.44).pptx"
     encoded_filename = quote(filename)
     return FileResponse(
         str(ADMIN_PPTX_PATH),

@@ -84,4 +84,34 @@ class BackupLoadRequest(BaseModel):
     filename: str = Field(..., description="복원할 백업 파일명")
     admin_emp_id: Optional[str] = Field(None, description="슈퍼관리자 사원번호")
 
+# v1.44: 특근 완료 확정 및 관리자 검토완료 스키마
+class OvertimeFinalizeRequest(BaseModel):
+    emp_id: str = Field(..., description="확정 처리를 수행하는 사원번호")
+    is_finalized: int = Field(1, description="1: 특근완료 확정, 0: 확정 취소")
+
+class OvertimeBatchFinalizeRequest(BaseModel):
+    emp_id: str = Field(..., description="확정 처리를 수행하는 사원번호")
+    ids: List[int] = Field(..., description="확정 대상 특근 ID 목록")
+    is_finalized: int = Field(1, description="1: 특근완료 확정, 0: 확정 취소")
+
+class OvertimeReviewRequest(BaseModel):
+    admin_emp_id: str = Field(..., description="검토 처리하는 관리자 사번")
+    is_reviewed: int = Field(1, description="1: 검토완료, 0: 검토완료 취소")
+
+class OvertimeBatchReviewRequest(BaseModel):
+    admin_emp_id: str = Field(..., description="검토 처리하는 관리자 사번")
+    ids: List[int] = Field(..., description="검토완료 대상 특근 ID 목록")
+    is_reviewed: int = Field(1, description="1: 검토완료, 0: 검토완료 취소")
+
+# v1.44: 무기명 건의사항란 스키마 (100% 무기명 원칙)
+class SuggestionCreateRequest(BaseModel):
+    category: str = Field(..., description="분류: 불편사항 / 시스템개선 / 특근휴무의견 / 기타요청")
+    title: str = Field(..., description="건의사항 제목")
+    content: str = Field(..., description="건의사항 상세 내용")
+
+class SuggestionReplyRequest(BaseModel):
+    admin_emp_id: str = Field(..., description="답변 작성 관리자 사번")
+    status: str = Field(..., description="상태: 접수됨 / 검토중 / 조치완료")
+    admin_reply: str = Field(..., description="관리자 공식 답변 및 조치내역")
+
 

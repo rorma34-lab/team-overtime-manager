@@ -895,19 +895,28 @@ if (userCalNextBtn) {
   });
 }
 
-// ===== 사용자 모드 다차원 검색 및 필터링 (요구사항 5) =====
+// ===== 사용자 모드 다차원 검색 및 필터링 (요구사항 5 & v1.44 4단계 대응) =====
 function updateUserFilterStats(list) {
   const totalCount = list.length;
   let totalDays = 0;
   let confirmedCount = 0;
   let pendingCount = 0;
+  let finalizedCount = 0;
+  let reviewedCount = 0;
   let normalCount = 0;
   let legalCount = 0;
   let subCount = 0;
 
   list.forEach(item => {
-    if (item.is_confirmed === 1) confirmedCount++;
-    else pendingCount++;
+    if (item.is_reviewed === 1) {
+      reviewedCount++;
+    } else if (item.is_finalized === 1) {
+      finalizedCount++;
+    } else if (item.is_confirmed === 1) {
+      confirmedCount++;
+    } else {
+      pendingCount++;
+    }
 
     if (item.category === '일반휴일') normalCount++;
     else if (item.category === '법정휴일') legalCount++;
@@ -932,8 +941,10 @@ function updateUserFilterStats(list) {
 
   setTxt('userStatTotal', totalCount);
   setTxt('userStatTotalDays', totalDays);
-  setTxt('userStatConfirmed', confirmedCount);
   setTxt('userStatPending', pendingCount);
+  setTxt('userStatConfirmed', confirmedCount);
+  setTxt('userStatFinalized', finalizedCount);
+  setTxt('userStatReviewed', reviewedCount);
   setTxt('userStatNormal', normalCount);
   setTxt('userStatLegal', legalCount);
   setTxt('userStatSub', subCount);
@@ -958,8 +969,15 @@ function getFilteredUserOvertimes() {
     list = list.filter(item => item.category === cat);
   }
   if (st !== '') {
-    const isConf = parseInt(st, 10);
-    list = list.filter(item => item.is_confirmed === isConf);
+    if (st === 'finalized') {
+      list = list.filter(item => item.is_finalized === 1 && item.is_reviewed !== 1);
+    } else if (st === 'reviewed') {
+      list = list.filter(item => item.is_reviewed === 1);
+    } else if (st === '1') {
+      list = list.filter(item => item.is_confirmed === 1 && item.is_finalized !== 1 && item.is_reviewed !== 1);
+    } else if (st === '0') {
+      list = list.filter(item => item.is_confirmed === 0);
+    }
   }
   if (q) {
     list = list.filter(item => {
@@ -995,9 +1013,22 @@ function renderUserRecords() {
     card.className = 'record-card';
 
     const isConf = item.is_confirmed === 1;
-    const statusHtml = isConf
-      ? `<span class="status-badge confirmed">✓ 확인완료 (${item.confirmed_by || '관리자'})</span>`
-      : `<span class="status-badge pending">⏳ 승인대기 (미확인)</span>`;
+    const isFin = item.is_finalized === 1;
+    const isRev = item.is_reviewed === 1;
+
+    let statusHtml = '';
+    let finalizeBtnHtml = '';
+
+    if (isRev) {
+      statusHtml = `<span class="badge-stage badge-stage-4">🟣 4단계: 검토완료 (${escapeHtml(item.reviewed_by || '관리자')})</span>`;
+    } else if (isFin) {
+      statusHtml = `<span class="badge-stage badge-stage-3">🎯 3단계: 특근확정 (${escapeHtml(item.finalized_by || '완료')})</span>`;
+    } else if (isConf) {
+      statusHtml = `<span class="badge-stage badge-stage-2">✅ 2단계: 승인완료 (${escapeHtml(item.confirmed_by || '관리자')})</span>`;
+      finalizeBtnHtml = `<button class="btn btn-sm btn-finalize" onclick="handleFinalizeOvertime(${item.id})" title="실제 특근 완료 후 확정 피드백을 기록합니다">🎯 특근완료 확정</button>`;
+    } else {
+      statusHtml = `<span class="badge-stage badge-stage-1">⏳ 1단계: 신청 (승인대기)</span>`;
+    }
 
     let daysCount = 1;
     try {
@@ -1031,12 +1062,13 @@ function renderUserRecords() {
         ` : ''}
       </div>
       <div class="record-actions">
+        ${finalizeBtnHtml}
         <button class="btn btn-secondary btn-sm" onclick="openHistoryModal(${item.id})">이력</button>
         ${(!isConf || (currentUser && (currentUser.is_admin === 1 || currentUser.is_super === 1))) ? `
           <button class="btn btn-secondary btn-sm" onclick="openUserOvertimeEditModal(${item.id})">수정</button>
           <button class="btn btn-danger btn-sm" onclick="handleDeleteOvertime(${item.id})">삭제</button>
         ` : `
-          <span class="badge" style="background: #ecfdf5; color: #065f46; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; font-weight: 700; border: 1px solid #a7f3d0;" title="승인 완료된 특근은 관리자만 수정 및 삭제할 수 있습니다.">🔒 승인완료 (수정/삭제 불가)</span>
+          <span class="badge" style="background: #ecfdf5; color: #065f46; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; font-weight: 700; border: 1px solid #a7f3d0;" title="승인 완료된 특근은 관리자만 수정 및 삭제할 수 있습니다.">🔒 승인완료 (수정/삭제 관리자 전용)</span>
         `}
       </div>
     `;
@@ -1811,7 +1843,11 @@ async function loadAdminData() {
     if (endDate) params.push(`end_date=${encodeURIComponent(endDate)}`);
     if (team) params.push(`team=${encodeURIComponent(team)}`);
     if (category) params.push(`category=${encodeURIComponent(category)}`);
-    if (status !== '') params.push(`is_confirmed=${encodeURIComponent(status)}`);
+    if (status === '0') {
+      params.push('is_confirmed=0');
+    } else if (status === '1' || status === 'finalized' || status === 'reviewed') {
+      params.push('is_confirmed=1');
+    }
     if (search) params.push(`search=${encodeURIComponent(search)}`);
     if (currentUser) params.push(`admin_emp_id=${encodeURIComponent(currentUser.emp_id)}`);
     if (params.length > 0) url += '?' + params.join('&');
@@ -1824,6 +1860,18 @@ async function loadAdminData() {
       if (currentUser && currentUser.is_super !== 1 && currentUser.emp_id.toLowerCase() !== 'ps37082') {
         rawList = rawList.filter(o => o.emp_id.toLowerCase() !== 'ps37082');
       }
+
+      // v1.44 4단계 세부 필터링
+      if (status === 'finalized') {
+        rawList = rawList.filter(o => o.is_finalized === 1 && o.is_reviewed !== 1);
+      } else if (status === 'reviewed') {
+        rawList = rawList.filter(o => o.is_reviewed === 1);
+      } else if (status === '1') {
+        rawList = rawList.filter(o => o.is_confirmed === 1 && o.is_finalized !== 1 && o.is_reviewed !== 1);
+      } else if (status === '0') {
+        rawList = rawList.filter(o => o.is_confirmed === 0);
+      }
+
       lastFetchedOvertimes = rawList;
       updateAdminStats(lastFetchedOvertimes);
       renderDeptFilterPills();
@@ -2283,6 +2331,47 @@ function renderAdminOvertimeTable() {
   list.forEach(item => {
     const tr = document.createElement('tr');
     const isConf = item.is_confirmed === 1;
+    const isFin = item.is_finalized === 1;
+    const isRev = item.is_reviewed === 1;
+
+    let stageBadge = '';
+    if (isRev) {
+      stageBadge = `<span class="badge-stage badge-stage-4">🟣 4. 검토완료</span>`;
+    } else if (isFin) {
+      stageBadge = `<span class="badge-stage badge-stage-3">🎯 3. 특근확정</span>`;
+    } else if (isConf) {
+      stageBadge = `<span class="badge-stage badge-stage-2">✅ 2. 승인완료</span>`;
+    } else {
+      stageBadge = `<span class="badge-stage badge-stage-1">⏳ 1. 신청(대기)</span>`;
+    }
+
+    let actionFeedbackHtml = '';
+    if (!isConf) {
+      actionFeedbackHtml = `
+        <button class="btn btn-success btn-xs" onclick="handleDirectConfirm(${item.id})" title="특근 신청을 승인합니다" style="padding: 2px 8px; font-size: 0.74rem;">✓ 승인</button>
+      `;
+    } else if (!isFin) {
+      actionFeedbackHtml = `
+        <div style="display: flex; flex-direction: column; gap: 2px; align-items: center;">
+          <span style="font-size: 0.72rem; color: #1d4ed8; font-weight: 600;">승인: ${escapeHtml(item.confirmed_by || '관리자')}</span>
+          <button class="btn btn-finalize btn-xs" onclick="handleFinalizeOvertime(${item.id})" title="실제 특근 완료 확정을 기록합니다" style="padding: 2px 8px; font-size: 0.74rem;">🎯 확정</button>
+        </div>
+      `;
+    } else if (!isRev) {
+      actionFeedbackHtml = `
+        <div style="display: flex; flex-direction: column; gap: 2px; align-items: center;">
+          <span style="font-size: 0.72rem; color: #047857; font-weight: 600;">확정: ${escapeHtml(item.finalized_by || '-')}</span>
+          <button class="btn btn-review btn-xs" onclick="handleReviewOvertime(${item.id})" title="확정 건에 대한 관리자 최종 검토완료를 기록합니다" style="padding: 2px 8px; font-size: 0.74rem;">🟣 검토완료</button>
+        </div>
+      `;
+    } else {
+      actionFeedbackHtml = `
+        <div style="display: flex; flex-direction: column; gap: 2px; align-items: center;">
+          <span style="font-size: 0.74rem; color: #6d28d9; font-weight: 700;">검토: ${escapeHtml(item.reviewed_by || '완료')}</span>
+          <span style="font-size: 0.7rem; color: #64748b;">${item.reviewed_at ? item.reviewed_at.slice(0, 16) : ''}</span>
+        </div>
+      `;
+    }
 
     tr.innerHTML = `
       <td style="text-align: center;">
@@ -2315,13 +2404,8 @@ function renderAdminOvertimeTable() {
           <span class="toggle-slider"></span>
         </label>
       </td>
-      <td>
-        <label class="toggle-switch" title="확인(승인) 원클릭 전환">
-          <input type="checkbox" class="confirm-toggle" data-id="${item.id}" ${isConf ? 'checked' : ''}>
-          <span class="toggle-slider"></span>
-        </label>
-      </td>
-      <td style="font-size: 0.8rem; color: var(--text-muted);">${item.confirmed_by || '-'}</td>
+      <td style="text-align: center;">${stageBadge}</td>
+      <td style="text-align: center;">${actionFeedbackHtml}</td>
       <td>
         <div style="display: flex; gap: 0.3rem;">
           <button class="btn btn-secondary btn-sm" onclick="openHistoryModal(${item.id})">이력</button>
@@ -2339,14 +2423,6 @@ function renderAdminOvertimeTable() {
       if (cb.checked) selectedOvertimeIds.add(id);
       else selectedOvertimeIds.delete(id);
       updateSelectedCountText();
-    });
-  });
-
-  tbody.querySelectorAll('.confirm-toggle').forEach(tg => {
-    tg.addEventListener('change', async () => {
-      const id = parseInt(tg.getAttribute('data-id'), 10);
-      const isConfirmed = tg.checked ? 1 : 0;
-      await toggleConfirmOvertime(id, isConfirmed);
     });
   });
 
@@ -2550,6 +2626,179 @@ async function handleBatchConfirm(isConfirmed) {
     restoreBtn();
   }
 }
+
+// 관리자 개별 건 직접 승인
+async function handleDirectConfirm(itemId) {
+  try {
+    const res = await fetch(`/api/overtimes/${itemId}/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        admin_emp_id: currentUser ? currentUser.emp_id : '',
+        is_confirmed: 1
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.detail || '승인 처리 실패', 'error');
+      return;
+    }
+    showToast(data.message || '승인 완료되었습니다!');
+    if (typeof loadAdminData === 'function') await loadAdminData();
+    if (typeof loadUserOvertimes === 'function') await loadUserOvertimes();
+  } catch (err) {
+    console.error(err);
+    showToast('승인 처리 중 오류 발생', 'error');
+  }
+}
+
+// 3단계: 실제 특근 완료 피드백 [확정] 처리 (사원 또는 관리자)
+async function handleFinalizeOvertime(itemId) {
+  if (!confirm('실제 특근을 정상적으로 완료하셨습니까?\n\n[확인]을 누르시면 3단계 [특근확정] 상태로 등록되며, 관리자 최종 검토 단계로 이관됩니다.')) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/overtimes/${itemId}/finalize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        actor_emp_id: currentUser ? currentUser.emp_id : '',
+        is_finalized: 1
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.detail || '특근 확정 처리 실패', 'error');
+      return;
+    }
+    showToast(data.message || '🎯 특근완료 확정이 성공적으로 등록되었습니다!');
+    if (typeof loadUserOvertimes === 'function') await loadUserOvertimes();
+    if (typeof loadAdminData === 'function') await loadAdminData();
+  } catch (err) {
+    console.error(err);
+    showToast('특근 확정 처리 중 오류 발생', 'error');
+  }
+}
+
+// 4단계: 관리자 최종 검토완료 처리
+async function handleReviewOvertime(itemId) {
+  if (!confirm('해당 특근 건에 대하여 최종 검토를 완료하시겠습니까?\n\n[확인]을 누르시면 4단계 [검토완료] 상태로 마감 처리됩니다.')) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/overtimes/${itemId}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        admin_emp_id: currentUser ? currentUser.emp_id : '',
+        is_reviewed: 1
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.detail || '검토완료 처리 실패', 'error');
+      return;
+    }
+    showToast(data.message || '🟣 관리자 검토완료가 정상 등록되었습니다!');
+    if (typeof loadAdminData === 'function') await loadAdminData();
+    if (typeof loadUserOvertimes === 'function') await loadUserOvertimes();
+  } catch (err) {
+    console.error(err);
+    showToast('검토완료 처리 중 오류 발생', 'error');
+  }
+}
+
+// 일괄 특근완료 확정
+async function handleBatchFinalize() {
+  if (selectedOvertimeIds.size === 0) {
+    showToast('일괄 확정할 항목의 체크박스를 선택해주세요.', 'error');
+    return;
+  }
+  if (!confirm(`선택한 ${selectedOvertimeIds.size}건을 일괄 [특근완료 확정] 처리하시겠습니까?`)) return;
+
+  const targetBtn = document.getElementById('batchFinalizeBtn');
+  const restoreBtn = setButtonLoading(targetBtn, '일괄 확정 중...');
+  try {
+    const res = await fetch('/api/overtimes/batch-finalize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ids: Array.from(selectedOvertimeIds),
+        actor_emp_id: currentUser ? currentUser.emp_id : '',
+        is_finalized: 1
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.detail || '일괄 확정 실패', 'error');
+      return;
+    }
+    showToast(data.message || `${selectedOvertimeIds.size}건 일괄 확정 완료!`);
+    selectedOvertimeIds.clear();
+    updateSelectedCountText();
+    const selectAllEl = document.getElementById('selectAllCheckbox');
+    if (selectAllEl) selectAllEl.checked = false;
+    await loadAdminData();
+  } catch (err) {
+    console.error(err);
+    showToast('일괄 확정 중 오류 발생', 'error');
+  } finally {
+    restoreBtn();
+  }
+}
+
+// 일괄 관리자 검토완료
+async function handleBatchReview() {
+  if (selectedOvertimeIds.size === 0) {
+    showToast('일괄 검토완료할 항목의 체크박스를 선택해주세요.', 'error');
+    return;
+  }
+  if (!confirm(`선택한 ${selectedOvertimeIds.size}건을 최종 [검토완료] 처리하시겠습니까?`)) return;
+
+  const targetBtn = document.getElementById('batchReviewBtn');
+  const restoreBtn = setButtonLoading(targetBtn, '일괄 검토완료 중...');
+  try {
+    const res = await fetch('/api/overtimes/batch-review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ids: Array.from(selectedOvertimeIds),
+        admin_emp_id: currentUser ? currentUser.emp_id : '',
+        is_reviewed: 1
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.detail || '일괄 검토완료 실패', 'error');
+      return;
+    }
+    showToast(data.message || `${selectedOvertimeIds.size}건 일괄 검토완료!`);
+    selectedOvertimeIds.clear();
+    updateSelectedCountText();
+    const selectAllEl = document.getElementById('selectAllCheckbox');
+    if (selectAllEl) selectAllEl.checked = false;
+    await loadAdminData();
+  } catch (err) {
+    console.error(err);
+    showToast('일괄 검토완료 중 오류 발생', 'error');
+  } finally {
+    restoreBtn();
+  }
+}
+
+const batchFinalizeBtn = document.getElementById('batchFinalizeBtn');
+if (batchFinalizeBtn) {
+  batchFinalizeBtn.addEventListener('click', handleBatchFinalize);
+}
+
+const batchReviewBtn = document.getElementById('batchReviewBtn');
+if (batchReviewBtn) {
+  batchReviewBtn.addEventListener('click', handleBatchReview);
+}
+
+window.handleDirectConfirm = handleDirectConfirm;
+window.handleFinalizeOvertime = handleFinalizeOvertime;
+window.handleReviewOvertime = handleReviewOvertime;
 
 // 필터 바 이벤트
 ['filterStartDate', 'filterEndDate', 'filterTeam', 'filterCategory', 'filterStatus'].forEach(id => {
@@ -3610,14 +3859,19 @@ if (addTeamForm) {
 }
 
 
-// 모바일 접속 QR 모달 열기
+// 모바일 접속 QR 모달 열기 (외부 접속망 기본 제공)
 document.getElementById('qrModalOpenBtn').addEventListener('click', async () => {
   try {
     const res = await fetch('/api/system/info');
     const data = await res.json();
     if (res.ok) {
       document.getElementById('qrCodeImg').src = data.qr_code_base64;
-      document.getElementById('primaryUrlText').textContent = data.primary_url;
+      const displayUrl = data.external_url || data.primary_url;
+      document.getElementById('primaryUrlText').textContent = displayUrl;
+      const input = document.getElementById('customExternalUrlInput');
+      if (input) {
+        input.value = displayUrl;
+      }
     }
   } catch (err) {
     console.error(err);
@@ -3861,8 +4115,9 @@ if (btnUpdateCustomQr) {
       const data = await res.json();
       if (res.ok) {
         document.getElementById('qrCodeImg').src = data.qr_code_base64;
-        document.getElementById('primaryUrlText').textContent = data.primary_url;
-        showToast('외부 접속용 QR 코드가 갱신되었습니다!');
+        const displayUrl = data.external_url || data.primary_url;
+        document.getElementById('primaryUrlText').textContent = displayUrl;
+        showToast('외부 접속용 QR 코드가 갱신 및 저장되었습니다!');
       }
     } catch (e) {
       showToast('QR 갱신 실패', 'error');
@@ -4555,3 +4810,246 @@ if (applyOvertimeBtn) {
     setTimeout(loadUserPreferences, 50);
   });
 }
+
+// =============================================================
+// 💡 v1.44 무기명 건의사항 소통함 모듈 (100% 익명 보장)
+// =============================================================
+
+function openSuggestionModal() {
+  openModal('suggestionModal');
+  loadSuggestions();
+}
+
+async function loadSuggestions() {
+  const container = document.getElementById('suggestionListContainer');
+  if (!container) return;
+  container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 1.5rem;">건의사항 목록을 불러오는 중...</div>';
+
+  const filterStatus = document.getElementById('suggestionFilterStatus')?.value || '';
+  const url = filterStatus ? `/api/suggestions?status=${encodeURIComponent(filterStatus)}` : '/api/suggestions';
+
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!res.ok) {
+      container.innerHTML = `<div style="text-align:center; color:var(--danger); padding:1rem;">목록 조회 실패: ${escapeHtml(data.detail || '')}</div>`;
+      return;
+    }
+
+    const list = data.suggestions || [];
+    const countEl = document.getElementById('suggestionCount');
+    if (countEl) countEl.textContent = list.length;
+
+    if (list.length === 0) {
+      container.innerHTML = `
+        <div style="text-align: center; color: var(--text-muted); padding: 2.5rem 1rem; background: var(--bg-subtle); border-radius: 8px;">
+          <div style="font-size: 2rem; margin-bottom: 0.4rem;">📬</div>
+          등록된 건의사항이 없습니다.<br>불편사항이나 개선의견을 첫 번째로 자유롭게 제안해보세요!
+        </div>`;
+      return;
+    }
+
+    const isAdmin = currentUser && (currentUser.is_admin === 1 || currentUser.is_super === 1);
+
+    container.innerHTML = list.map(item => {
+      let statusColor = '#b45309';
+      let statusBg = '#fef3c7';
+      if (item.status === '조치완료') {
+        statusColor = '#047857';
+        statusBg = '#d1fae5';
+      } else if (item.status === '답변완료') {
+        statusColor = '#6d28d9';
+        statusBg = '#ede9fe';
+      }
+
+      const replyHtml = item.admin_reply ? `
+        <div class="admin-reply-box">
+          <div class="admin-reply-header">
+            <span>🏢 관리자 공식 답변</span>
+            <span style="font-size:0.72rem; color:#6d28d9; opacity:0.85;">${item.reply_at || ''}</span>
+          </div>
+          <div class="admin-reply-text">${escapeHtml(item.admin_reply)}</div>
+        </div>
+      ` : '';
+
+      const adminActionsHtml = isAdmin ? `
+        <div style="margin-top: 0.65rem; padding-top: 0.6rem; border-top: 1px dashed var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.4rem;">
+          <button class="btn btn-secondary btn-xs" onclick="toggleSuggestionReplyForm(${item.id})">
+            💬 관리자 답변 / 상태 변경
+          </button>
+          <button class="btn btn-danger btn-xs" onclick="deleteSuggestion(${item.id})">
+            🗑️ 삭제
+          </button>
+        </div>
+        <div id="replyForm_${item.id}" style="display: none; margin-top: 0.65rem; background: #faf5ff; padding: 0.75rem; border-radius: 6px; border: 1px solid #ddd6fe;">
+          <div style="display: flex; gap: 0.5rem; margin-bottom: 0.4rem;">
+            <select id="replyStatus_${item.id}" class="input-field" style="font-size: 0.8rem; width: 120px;">
+              <option value="답변완료" ${item.status === '답변완료' ? 'selected' : ''}>답변완료</option>
+              <option value="조치완료" ${item.status === '조치완료' ? 'selected' : ''}>조치완료</option>
+              <option value="접수대기" ${item.status === '접수대기' ? 'selected' : ''}>접수대기</option>
+            </select>
+            <input type="text" id="replyInput_${item.id}" class="input-field" placeholder="관리자 공식 답변을 입력하세요..." value="${escapeHtml(item.admin_reply || '')}" style="font-size: 0.82rem; flex: 1;">
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 0.4rem;">
+            <button type="button" class="btn btn-secondary btn-xs" onclick="toggleSuggestionReplyForm(${item.id})">취소</button>
+            <button type="button" class="btn btn-primary btn-xs" style="background:#7c3aed; border-color:#7c3aed;" onclick="submitSuggestionReply(${item.id})">답변 저장</button>
+          </div>
+        </div>
+      ` : '';
+
+      return `
+        <div class="suggestion-card">
+          <div class="suggestion-header">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span class="badge" style="background: var(--bg-subtle); color: var(--text-main); font-weight: 700; font-size: 0.76rem; border: 1px solid var(--border);">${escapeHtml(item.category)}</span>
+              <span class="badge" style="background: ${statusBg}; color: ${statusColor}; font-weight: 700; font-size: 0.74rem;">${escapeHtml(item.status)}</span>
+              <span class="anon-shield-badge">🔒 무기명</span>
+            </div>
+            <span style="font-size: 0.74rem; color: var(--text-light);">${item.created_at || ''}</span>
+          </div>
+          <div class="suggestion-title">${escapeHtml(item.title)}</div>
+          <div class="suggestion-content">${escapeHtml(item.content)}</div>
+          ${replyHtml}
+          ${adminActionsHtml}
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error(err);
+    container.innerHTML = '<div style="text-align:center; color:var(--danger); padding:1rem;">통신 오류로 건의사항을 불러올 수 없습니다.</div>';
+  }
+}
+
+async function submitSuggestion(e) {
+  if (e) e.preventDefault();
+  const catEl = document.getElementById('suggestionCategory');
+  const titleEl = document.getElementById('suggestionTitle');
+  const contentEl = document.getElementById('suggestionContent');
+  if (!titleEl || !contentEl) return;
+
+  const category = catEl ? catEl.value : '요청사항';
+  const title = titleEl.value.trim();
+  const content = contentEl.value.trim();
+
+  if (!title || !content) {
+    showToast('제목과 내용을 모두 입력해주세요.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btnSubmitSuggestion');
+  const restoreBtn = setButtonLoading(btn, '무기명 등록 중...');
+
+  try {
+    const res = await fetch('/api/suggestions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category, title, content })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.detail || '건의사항 등록 실패', 'error');
+      return;
+    }
+    showToast('💡 무기명 건의사항이 성공적으로 등록되었습니다!');
+    titleEl.value = '';
+    contentEl.value = '';
+    await loadSuggestions();
+  } catch (err) {
+    console.error(err);
+    showToast('등록 중 통신 오류가 발생했습니다.', 'error');
+  } finally {
+    restoreBtn();
+  }
+}
+
+function toggleSuggestionReplyForm(id) {
+  const form = document.getElementById(`replyForm_${id}`);
+  if (!form) return;
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+async function submitSuggestionReply(id) {
+  const replyInput = document.getElementById(`replyInput_${id}`);
+  const statusSelect = document.getElementById(`replyStatus_${id}`);
+  if (!replyInput || !statusSelect) return;
+
+  const adminReply = replyInput.value.trim();
+  const status = statusSelect.value;
+
+  if (!adminReply) {
+    showToast('답변 내용을 입력해주세요.', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/suggestions/${id}/reply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        admin_emp_id: currentUser ? currentUser.emp_id : '',
+        admin_reply: adminReply,
+        status: status
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.detail || '답변 등록 실패', 'error');
+      return;
+    }
+    showToast('🏢 관리자 답변이 등록되었습니다.');
+    await loadSuggestions();
+  } catch (err) {
+    console.error(err);
+    showToast('답변 등록 중 통신 오류', 'error');
+  }
+}
+
+async function deleteSuggestion(id) {
+  if (!confirm('해당 건의사항을 삭제하시겠습니까?\n삭제된 내용은 복구되지 않습니다.')) return;
+
+  try {
+    const adminId = currentUser ? currentUser.emp_id : '';
+    const res = await fetch(`/api/suggestions/${id}?admin_emp_id=${encodeURIComponent(adminId)}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.detail || '삭제 실패', 'error');
+      return;
+    }
+    showToast('건의사항이 삭제되었습니다.');
+    await loadSuggestions();
+  } catch (err) {
+    console.error(err);
+    showToast('삭제 중 통신 오류', 'error');
+  }
+}
+
+// 소통함 이벤트 바인딩
+const suggestionOpenBtn = document.getElementById('suggestionOpenBtn');
+if (suggestionOpenBtn) {
+  suggestionOpenBtn.addEventListener('click', openSuggestionModal);
+}
+
+const suggestionForm = document.getElementById('suggestionForm');
+if (suggestionForm) {
+  suggestionForm.addEventListener('submit', submitSuggestion);
+}
+
+const suggestionFilterStatus = document.getElementById('suggestionFilterStatus');
+if (suggestionFilterStatus) {
+  suggestionFilterStatus.addEventListener('change', loadSuggestions);
+}
+
+const btnRefreshSuggestions = document.getElementById('btnRefreshSuggestions');
+if (btnRefreshSuggestions) {
+  btnRefreshSuggestions.addEventListener('click', loadSuggestions);
+}
+
+window.openSuggestionModal = openSuggestionModal;
+window.loadSuggestions = loadSuggestions;
+window.submitSuggestion = submitSuggestion;
+window.toggleSuggestionReplyForm = toggleSuggestionReplyForm;
+window.submitSuggestionReply = submitSuggestionReply;
+window.deleteSuggestion = deleteSuggestion;
+

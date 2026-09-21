@@ -194,6 +194,36 @@ def init_db():
     if "trip_end_date" not in columns:
         cursor.execute("ALTER TABLE overtimes ADD COLUMN trip_end_date TEXT DEFAULT '';")
 
+    # v1.44: 특근 완료 확정 및 관리자 검토완료
+    if "is_finalized" not in columns:
+        cursor.execute("ALTER TABLE overtimes ADD COLUMN is_finalized INTEGER DEFAULT 0;")
+    if "finalized_by" not in columns:
+        cursor.execute("ALTER TABLE overtimes ADD COLUMN finalized_by TEXT DEFAULT '';")
+    if "finalized_at" not in columns:
+        cursor.execute("ALTER TABLE overtimes ADD COLUMN finalized_at TEXT DEFAULT '';")
+    if "is_reviewed" not in columns:
+        cursor.execute("ALTER TABLE overtimes ADD COLUMN is_reviewed INTEGER DEFAULT 0;")
+    if "reviewed_by" not in columns:
+        cursor.execute("ALTER TABLE overtimes ADD COLUMN reviewed_by TEXT DEFAULT '';")
+    if "reviewed_at" not in columns:
+        cursor.execute("ALTER TABLE overtimes ADD COLUMN reviewed_at TEXT DEFAULT '';")
+
+    # v1.44: 무기명 건의사항란 (소통 게시판, 100% 무기명 보장)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS suggestions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category TEXT NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        status TEXT DEFAULT '접수됨',
+        admin_reply TEXT DEFAULT '',
+        reply_at TEXT DEFAULT '',
+        created_at TEXT NOT NULL
+    )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_suggestions_created ON suggestions(created_at);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_suggestions_status ON suggestions(status);")
+
     # v1.41: 사용자별 마지막 입력 선호 정보 테이블
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS user_preferences (

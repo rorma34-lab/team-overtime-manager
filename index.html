@@ -37,11 +37,14 @@
         <div class="brand-logo">⏰</div>
         <div>
           <span class="brand-title">스마트 특근 관리</span>
-          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.43</span>
+          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.44</span>
           <span class="brand-subtitle">Smart Overtime System</span>
         </div>
       </div>
       <div class="nav-actions" id="headerNavActions" style="display: none;">
+        <button class="btn btn-warning btn-sm" id="suggestionOpenBtn" title="무기명 건의사항 및 불편·요청 소통함" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #fff; border: none; font-weight: 700;">
+          💡 건의사항 소통함
+        </button>
         <button class="btn btn-secondary btn-sm" id="globalSyncBtn" title="서버 최신 데이터 실시간 새로고침 (동시 접속 동기화)">
           🔄 새로고침
         </button>
@@ -252,11 +255,13 @@
                 </select>
               </div>
               <div>
-                <label class="input-label" style="font-size: 0.78rem; margin-bottom: 3px;">승인 상태</label>
+                <label class="input-label" style="font-size: 0.78rem; margin-bottom: 3px;">진행 상태 (4단계)</label>
                 <select id="userFilterStatus" class="input-field" style="padding: 0.45rem 0.65rem; font-size: 0.85rem;">
                   <option value="">전체 상태</option>
-                  <option value="1">승인완료</option>
-                  <option value="0">승인대기</option>
+                  <option value="0">1단계: 신청 (승인대기)</option>
+                  <option value="1">2단계: 승인완료</option>
+                  <option value="finalized">3단계: 특근확정</option>
+                  <option value="reviewed">4단계: 검토완료</option>
                 </select>
               </div>
               <div style="grid-column: span 2;">
@@ -264,18 +269,24 @@
                 <input type="text" id="userFilterSearch" class="input-field" placeholder="프로젝트번호, 장소, 사유 검색..." style="padding: 0.45rem 0.65rem; font-size: 0.85rem;">
               </div>
             </div>
-            <!-- 나의 특근 검색 결과 통계 요약 (총 건수 및 각 상태/구분별 집계) -->
+            <!-- 나의 특근 검색 결과 통계 요약 (총 건수 및 4단계/구분별 집계) -->
             <div id="userFilterStatsSummary" style="margin-top: 0.85rem; padding-top: 0.75rem; border-top: 1px dashed var(--border); display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; justify-content: space-between;">
               <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center;">
                 <span style="font-size: 0.78rem; font-weight: 700; color: var(--text-main); margin-right: 0.25rem;">📊 검색 결과 통계:</span>
                 <span class="badge" style="background: #e0f2fe; color: #0369a1; font-size: 0.78rem; padding: 3px 8px; border-radius: 6px; font-weight: 700;">
                   총 <b id="userStatTotal">0</b>건 (<b id="userStatTotalDays">0</b>일)
                 </span>
-                <span class="badge" style="background: #ecfdf5; color: #065f46; font-size: 0.78rem; padding: 3px 8px; border-radius: 6px; font-weight: 600;">
-                  ✅ 승인완료 <b id="userStatConfirmed">0</b>건
+                <span class="badge" style="background: #fef3c7; color: #b45309; font-size: 0.78rem; padding: 3px 8px; border-radius: 6px; font-weight: 600;">
+                  ⏳ 신청 <b id="userStatPending">0</b>
                 </span>
-                <span class="badge" style="background: #fffbeb; color: #92400e; font-size: 0.78rem; padding: 3px 8px; border-radius: 6px; font-weight: 600;">
-                  ⏳ 승인대기 <b id="userStatPending">0</b>건
+                <span class="badge" style="background: #dbeafe; color: #1d4ed8; font-size: 0.78rem; padding: 3px 8px; border-radius: 6px; font-weight: 600;">
+                  ✅ 승인 <b id="userStatConfirmed">0</b>
+                </span>
+                <span class="badge" style="background: #d1fae5; color: #047857; font-size: 0.78rem; padding: 3px 8px; border-radius: 6px; font-weight: 600;">
+                  🎯 확정 <b id="userStatFinalized">0</b>
+                </span>
+                <span class="badge" style="background: #ede9fe; color: #6d28d9; font-size: 0.78rem; padding: 3px 8px; border-radius: 6px; font-weight: 600;">
+                  🟣 검토완료 <b id="userStatReviewed">0</b>
                 </span>
                 <span id="userFilterMatchCount" style="display:none;">0</span>
               </div>
@@ -416,10 +427,16 @@
               <button class="btn btn-primary btn-sm" id="adminProxyOvertimeBtn" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); border: none;">
                 ➕ 팀원 특근/휴무 신청
               </button>
-              <button class="btn btn-success btn-sm" id="batchConfirmBtn">
-                ✓ 선택 일괄 확인
+              <button class="btn btn-success btn-sm" id="batchConfirmBtn" title="선택 건을 2단계 승인 처리합니다">
+                ✓ 일괄 승인
               </button>
-              <button class="btn btn-secondary btn-sm" id="batchUnconfirmBtn">
+              <button class="btn btn-sm btn-finalize" id="batchFinalizeBtn" title="선택 건을 3단계 특근완료 확정 처리합니다">
+                🎯 일괄 확정
+              </button>
+              <button class="btn btn-sm btn-review" id="batchReviewBtn" title="확정된 선택 건을 4단계 검토완료 처리합니다">
+                🟣 일괄 검토완료
+              </button>
+              <button class="btn btn-secondary btn-sm" id="batchUnconfirmBtn" title="선택 건의 승인을 취소합니다">
                 ✕ 일괄 취소
               </button>
               <button class="btn btn-danger btn-sm" id="batchDeleteBtn" style="background: #ef4444; border-color: #dc2626; color: #ffffff; font-weight: 700;">
@@ -561,11 +578,13 @@
                 </select>
               </div>
               <div>
-                <label class="input-label" style="margin-bottom:2px;">승인 상태</label>
+                <label class="input-label" style="margin-bottom:2px;">진행 상태 (4단계)</label>
                 <select id="filterStatus" class="input-field" style="padding:0.4rem 0.6rem; font-size:0.85rem;">
                   <option value="">전체 상태</option>
-                  <option value="1">확인완료</option>
-                  <option value="0">승인대기</option>
+                  <option value="0">1단계: 신청 (승인대기)</option>
+                  <option value="1">2단계: 승인완료</option>
+                  <option value="finalized">3단계: 특근확정</option>
+                  <option value="reviewed">4단계: 검토완료</option>
                 </select>
               </div>
               <div>
@@ -595,8 +614,8 @@
                     <th>사유</th>
                     <th class="sortable" data-sort="bonus_granted">보너스 <span class="sort-icon">↕</span></th>
                     <th class="sortable" data-sort="is_pre_deduct">사전차감 <span class="sort-icon">↕</span></th>
-                    <th class="sortable" data-sort="is_confirmed">확인(승인) <span class="sort-icon">↕</span></th>
-                    <th>확인자</th>
+                    <th class="sortable" data-sort="is_confirmed">진행단계(4단계) <span class="sort-icon">↕</span></th>
+                    <th>확정 / 검토</th>
                     <th>관리</th>
                   </tr>
                 </thead>
@@ -1050,34 +1069,34 @@
   <div class="modal-overlay" id="qrModal">
     <div class="modal-content" style="text-align: center; max-width: 520px;">
       <div class="modal-header">
-        <h3 class="modal-title">📱 모바일 및 외부망 접속 안내</h3>
+        <h3 class="modal-title">📱 외부 접속망 모바일 QR 안내</h3>
         <button class="modal-close" data-close="qrModal">&times;</button>
       </div>
       <div class="modal-body">
         <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; text-align: left; font-size: 0.83rem; color: #1e40af;">
-          🌐 <b>외부망(LTE / 5G / 자택) 모바일 접속</b><br>
-          스마트폰 LTE/5G 데이터망이나 사외에서 접속할 때 사용하는 QR 코드입니다. 외부 도메인이나 포트포워딩 주소가 있는 경우 아래에 입력 후 [QR 갱신]을 누르세요.
+          🌐 <b>외부 접속망(LTE / 5G / 자택) 전용 QR 코드</b><br>
+          스마트폰 기본 카메라로 스캔하시면 사내 Wi-Fi 없이도 LTE/5G 데이터망으로 어디서나 즉시 접속됩니다. 외부 도메인이나 Cloudflare 보안 주소가 변경된 경우 아래에 입력 후 [QR 갱신]을 누르세요.
         </div>
 
         <div style="background: #fff; padding: 1rem; display: inline-block; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 1rem; box-shadow: var(--shadow-sm);">
-          <img id="qrCodeImg" src="" alt="접속 QR코드" style="width: 180px; height: 180px; display: block;">
+          <img id="qrCodeImg" src="" alt="외부 접속 QR코드" style="width: 180px; height: 180px; display: block;">
         </div>
 
         <div style="font-size: 0.95rem; font-weight: 700; color: var(--primary); margin-bottom: 0.75rem;" id="primaryUrlText">
-          http://...:8000
+          https://overtime-system.trycloudflare.com
         </div>
 
         <!-- 외부 접속 URL 직접 입력 및 생성 -->
         <div style="display: flex; gap: 0.4rem; margin-bottom: 1rem;">
-          <input type="text" id="customExternalUrlInput" class="input-field" placeholder="외부 공개 URL (예: https://my-team.loca.lt 등)" style="font-size: 0.82rem; padding: 0.45rem 0.6rem;">
+          <input type="text" id="customExternalUrlInput" class="input-field" placeholder="외부 공개 URL (예: https://xxxx.trycloudflare.com)" style="font-size: 0.82rem; padding: 0.45rem 0.6rem;">
           <button type="button" class="btn btn-primary btn-sm" id="btnUpdateCustomQr">QR 갱신</button>
         </div>
 
         <div style="background: var(--bg-subtle); padding: 0.85rem; border-radius: 8px; font-size: 0.82rem; text-align: left; color: var(--text-muted);">
           <b>💡 외부망 접속 가이드</b><br>
-          1. <b>원클릭 사외 터널</b>: 공유기 포트포워딩 또는 사외 공개 툴(ngrok, localtunnel 등) 주소를 입력하면 외부 어디서든 카메라 스캔만으로 접속됩니다.<br>
-          2. <b>모바일 데이터 연동</b>: 모바일에서 등록한 팀원과 특근 신청 내역은 PC 관리자 화면과 실시간 즉시 연동됩니다.<br>
-          3. <b>앱처럼 쓰기</b>: 모바일 브라우저 메뉴에서 [홈 화면에 추가]를 터치하시면 스마트폰 바탕화면 앱으로 등록되어 언제든 간편하게 접속됩니다.
+          1. <b>원클릭 스마트폰 스캔</b>: 스마트폰 카메라로 QR 코드를 비추면 LTE/5G 어디서나 1초 만에 특근 시스템이 열립니다.<br>
+          2. <b>모바일 데이터 실시간 연동</b>: 스마트폰에서 신청한 내역은 PC 관리자 화면 및 대시보드와 실시간 즉시 100% 동기화됩니다.<br>
+          3. <b>앱처럼 쓰기</b>: 모바일 브라우저 메뉴에서 [홈 화면에 추가]를 터치하시면 스마트폰 바탕화면 전용 앱으로 등록되어 언제든 간편하게 접속됩니다.
         </div>
       </div>
       <div class="modal-footer">
@@ -1095,11 +1114,30 @@
       </div>
       <div class="modal-body" style="max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1.25rem;">
         
-        <!-- v1.43 (Latest) -->
-        <div style="background: var(--bg-card); border: 2px solid var(--primary); padding: 1.1rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
+        <!-- v1.44 (Latest) -->
+        <div style="background: var(--bg-card); border: 2px solid #0d9488; padding: 1.1rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
           <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-            <span style="background: var(--primary); color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.43</span>
+            <span style="background: #0d9488; color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.44</span>
             <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-main);">최신 정식 릴리즈 (Latest)</span>
+            <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-21</span>
+          </div>
+          <div style="font-weight: 800; color: #0d9488; margin-bottom: 0.5rem; font-size: 0.88rem;">
+            🎯 v1.44 4단계 특근 라이프사이클(신청→승인→확정→검토), 엑셀 정산 구분 & 무기명 소통함
+          </div>
+          <ul style="margin-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.84rem; line-height: 1.6; color: var(--text-main);">
+            <li><b>실특근 완료 피드백 [확정] 기능 신설</b>: 승인된 특근에 대해 사원 또는 관리자가 실제 특근 완료 후 [확정] 버튼을 눌러 이행 완료 피드백 기록</li>
+            <li><b>관리자 [검토완료] 2차 검증 기능 신설</b>: 확정된 특근 내역에 대해 관리자가 최종 [검토완료]를 수행하는 4단계 완결형 체계 확립</li>
+            <li><b>특근정보 내보내기 4단계 구분 집계</b>: 엑셀 상세 원장 및 개인별/부서별 정산표에 신청, 승인, 확정, 검토 4단계별 최종특근일수 분리 집계 열 신설</li>
+            <li><b>100% 무기명 건의사항 소통함 게시판</b>: 사번/성명이 일체 저장되지 않는 무기명 소통 창구 신설 및 관리자 공식 답변·상태 조치 지원</li>
+            <li><b>사용자 및 관리자 매뉴얼 v1.44 전면 개정</b>: 4단계 피드백 흐름 및 무기명 소통함 사용 가이드 탑재 및 메인 루트 자동 동기화</li>
+          </ul>
+        </div>
+
+        <!-- v1.43 -->
+        <div style="background: var(--bg-subtle); border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-md);">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem;">
+            <span style="background: var(--text-muted); color: #fff; font-size: 0.8rem; font-weight: 700; padding: 2px 10px; border-radius: 9999px;">v1.43</span>
+            <span style="font-size: 0.9rem; font-weight: 700; color: var(--text-main);">이전 릴리즈</span>
             <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-18</span>
           </div>
           <div style="font-weight: 800; color: var(--primary); margin-bottom: 0.5rem; font-size: 0.88rem;">
@@ -1666,11 +1704,84 @@
     </div>
   </div>
 
+  <!-- 10. 무기명 건의사항 소통함 모달 (100% 익명 보장) -->
+  <div class="modal-overlay" id="suggestionModal">
+    <div class="modal-content" style="max-width: 680px; max-height: 85vh; display: flex; flex-direction: column;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: #fff; border-radius: 12px 12px 0 0; padding: 1rem 1.25rem;">
+        <div>
+          <h3 class="modal-title" style="color: #fff; display: flex; align-items: center; gap: 6px; font-size: 1.1rem;">
+            💡 무기명 건의사항 소통함
+            <span class="anon-shield-badge">🔒 100% 익명 보장</span>
+          </h3>
+          <p style="font-size: 0.76rem; color: #94a3b8; margin: 4px 0 0 0;">
+            사원명 및 사번이 시스템에 일체 저장되지 않는 순수 무기명 소통 공간입니다.
+          </p>
+        </div>
+        <button class="modal-close" data-close="suggestionModal" style="color: #fff;">&times;</button>
+      </div>
+      <div class="modal-body" style="overflow-y: auto; flex: 1; padding: 1.25rem;">
+        <!-- 신규 건의 작성 폼 -->
+        <form id="suggestionForm" style="background: #f8fafc; border: 1.5px solid var(--border); border-radius: 10px; padding: 1rem; margin-bottom: 1.25rem;">
+          <div style="font-weight: 700; font-size: 0.9rem; color: var(--text-main); margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+            <span>✍️ 새 건의 및 의견 등록</span>
+            <span style="font-size: 0.75rem; color: #64748b;">작성자 정보 없이 등록됩니다</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 140px 1fr; gap: 0.65rem; margin-bottom: 0.65rem;">
+            <select id="suggestionCategory" class="input-field" style="font-size: 0.85rem;" required>
+              <option value="불편사항">🚨 불편사항</option>
+              <option value="요청사항" selected>📋 요청사항</option>
+              <option value="개선의견">💡 개선의견</option>
+              <option value="기타">💬 기타</option>
+            </select>
+            <input type="text" id="suggestionTitle" class="input-field" placeholder="건의 제목을 입력하세요 (예: 야간 특근 식대 정산 관련 요청)" style="font-size: 0.85rem;" required maxlength="100">
+          </div>
+          <div style="margin-bottom: 0.75rem;">
+            <textarea id="suggestionContent" class="input-field" placeholder="불편사항, 개선 요청, 업무 건의 등을 자유롭게 작성해주세요." rows="3" style="font-size: 0.85rem; resize: vertical;" required maxlength="1000"></textarea>
+          </div>
+          <div style="display: flex; justify-content: flex-end;">
+            <button type="submit" class="btn btn-primary btn-sm" id="btnSubmitSuggestion" style="background: #0f766e; border-color: #0f766e; font-weight: 700;">
+              📨 무기명으로 등록하기
+            </button>
+          </div>
+        </form>
+
+        <!-- 등록된 건의사항 목록 -->
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <h4 style="font-size: 0.92rem; font-weight: 700; margin: 0; color: var(--text-main);">
+                📬 접수된 소통 목록 (<span id="suggestionCount">0</span>건)
+              </h4>
+            </div>
+            <div style="display: flex; gap: 0.4rem; align-items: center;">
+              <select id="suggestionFilterStatus" class="input-field" style="padding: 0.25rem 0.5rem; font-size: 0.78rem; width: auto;">
+                <option value="">전체 상태</option>
+                <option value="접수대기">접수대기</option>
+                <option value="조치완료">조치완료</option>
+                <option value="답변완료">답변완료</option>
+              </select>
+              <button type="button" class="btn btn-secondary btn-xs" id="btnRefreshSuggestions">🔄 새로고침</button>
+            </div>
+          </div>
+
+          <div id="suggestionListContainer">
+            <div style="text-align: center; color: var(--text-muted); padding: 2rem 0; font-size: 0.85rem;">
+              건의사항을 불러오는 중입니다...
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="padding: 0.75rem 1.25rem;">
+        <button type="button" class="btn btn-secondary btn-sm" data-close="suggestionModal">닫기</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 토스트 메시지 컨테이너 -->
   <div class="toast-container" id="toastContainer"></div>
 
   <!-- 클라이언트 사이드 고속 엑셀 생성 라이브러리 (SheetJS) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="/js/app.js?v=20260918_v143"></script>
+  <script src="/js/app.js?v=20260921_v144"></script>
 </body>
 </html>
