@@ -35,7 +35,8 @@ from exporter import (
     generate_overtime_excel,
     generate_settlement_excel,
     aggregate_user_holidays,
-    aggregate_team_holidays
+    aggregate_team_holidays,
+    import_overtimes_from_excel
 )
 from generate_manual import create_manual, PPTX_PATH, USER_PPTX_PATH, ADMIN_PPTX_PATH
 
@@ -54,7 +55,7 @@ if not EXTERNAL_URL_FILE.exists():
     except Exception:
         pass
 
-app = FastAPI(title="Team Overtime Manager", version="v1.47")
+app = FastAPI(title="Team Overtime Manager", version="v1.48")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -1925,9 +1926,40 @@ def batch_delete_overtimes(payload: dict):
     conn.commit()
     conn.close()
 
-    return {"message": f"{deleted_count}건의 특근 내역이 일괄 삭제되었습니다.", "deleted_count": deleted_count}
+# ----------------- 엑셀 가져오기 & 내보내기 -----------------
 
-# ----------------- 엑셀 내보내기 & 매뉴얼 다운로드 -----------------
+@app.post("/api/overtimes/import-excel")
+async def import_overtimes_excel_endpoint(request: Request):
+    """
+    특근 엑셀 파일(휴일일자별_특근현황 시트)을 업로드받아 선택된 부서의 특근 데이터를 DB에 갱신/추가합니다.
+    """
+    file_bytes = None
+    target_teams = None
+    admin_emp_id = None
+
+    try:
+        payload = await request.json()
+        file_b64 = payload.get("file_b64") or payload.get("file") or ""
+        if file_b64:
+            if "," in file_b64:
+                file_b64 = file_b64.split(",")[1]
+            file_bytes = base64.b64decode(file_b64)
+        target_teams = payload.get("target_teams") or payload.get("team")
+        admin_emp_id = payload.get("admin_emp_id")
+    except Exception:
+        try:
+            file_bytes = await request.body()
+            target_teams = request.query_params.get("target_teams") or request.query_params.get("team")
+            admin_emp_id = request.query_params.get("admin_emp_id")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"요청 데이터를 읽을 수 없습니다: {str(e)}")
+
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="업로드할 엑셀 파일 데이터가 없습니다.")
+
+    res = import_overtimes_from_excel(file_bytes, target_teams=target_teams, admin_emp_id=admin_emp_id)
+    return res
+
 
 @app.post("/api/overtimes/export-settlement")
 async def export_settlement(req: Request):

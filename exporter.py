@@ -1070,3 +1070,266 @@ def generate_settlement_excel(
     wb.save(buffer)
     buffer.seek(0)
     return buffer
+
+
+def import_overtimes_from_excel(file_bytes: bytes, target_teams: list = None, admin_emp_id: str = None) -> dict:
+    """
+    엑셀 파일(특근현황_일자별개인별정산의 1번째 시트 또는 특근목록)에서 데이터를 읽어와
+    선택된 부서(target_teams)의 특근 정보를 DB(overtimes)에 갱신/추가합니다.
+    
+    - 선택된 부서만 처리하며 선택되지 않은 부서의 정보는 100% 보존합니다.
+    - 동일 사원/동일 날짜/동일 구분의 기록은 중복 생성을 방지(기존 데이터 갱신)합니다.
+    - 실패/오류 항목은 사유별 상세 로그를 반환합니다.
+    """
+    import openpyxl
+    import re
+    from database import get_db_connection, log_audit
+
+    if isinstance(file_bytes, (bytes, bytearray)):
+        bio = io.BytesIO(file_bytes)
+    else:
+        bio = file_bytes
+
+    try:
+        wb = openpyxl.load_workbook(bio, data_only=True)
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"엑셀 파일을 열 수 없습니다: {str(e)}",
+            "total_rows": 0, "processed_count": 0, "created_count": 0, "updated_count": 0,
+            "skipped_count": 0, "ignored_teams_count": 0, "errors": []
+        }
+
+    ws = wb.worksheets[0]
+
+    # 1. 헤더 행 찾기
+    header_row_idx = None
+    headers_map = {}
+
+    for r in range(1, min(15, ws.max_row + 1)):
+        row_vals = [str(ws.cell(r, c).value or "").strip() for c in range(1, ws.max_column + 1)]
+        row_str = " ".join(row_vals)
+        if any(kw in row_str for kw in ["신청자", "사번", "성명", "근무기간", "특근일자", "분류", "소속팀"]):
+            header_row_idx = r
+            for c_idx, val in enumerate(row_vals, 1):
+                clean_v = val.replace(" ", "").replace("\n", "")
+                headers_map[clean_v] = c_idx
+            break
+
+    if not header_row_idx:
+        return {
+            "success": False,
+            "message": "엑셀 파일에서 올바른 헤더(사번/신청자, 소속팀, 근무기간/특근일자 등)를 찾을 수 없습니다.",
+            "total_rows": 0, "processed_count": 0, "created_count": 0, "updated_count": 0,
+            "skipped_count": 0, "ignored_teams_count": 0, "errors": []
+        }
+
+    # 헤더 인덱스 매핑 찾기
+    def find_col(possible_names):
+        for k, col in headers_map.items():
+            for name in possible_names:
+                if name in k:
+                    return col
+        return None
+
+    emp_col = find_col(["신청자", "사번", "사원번호"])
+    name_col = find_col(["성명", "이름"])
+    team_col = find_col(["소속팀", "소속", "부서"])
+    cat_col = find_col(["분류", "특근구분", "구분"])
+    period_col = find_col(["근무기간", "특근기간", "특근일자", "일자"])
+    start_col = find_col(["시작일", "시작일자"])
+    end_col = find_col(["종료일", "종료일자"])
+    proj_col = find_col(["프로젝트"])
+    loc_col = find_col(["장소", "근무장소"])
+    reason_col = find_col(["사유", "특근사유"])
+    bonus_col = find_col(["보너스"])
+    pre_deduct_col = find_col(["사전차감", "대체휴무"])
+
+    # 필터 타겟 부서 정제
+    valid_target_teams = set()
+    if target_teams:
+        if isinstance(target_teams, str):
+            valid_target_teams = set(t.strip() for t in target_teams.split(",") if t.strip())
+        elif isinstance(target_teams, (list, set, tuple)):
+            valid_target_teams = set(t.strip() for t in target_teams if t and str(t).strip())
+
+    total_rows = 0
+    processed_count = 0
+    created_count = 0
+    updated_count = 0
+    skipped_count = 0
+    ignored_teams_count = 0
+    errors = []
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 사원 DB 정보 캐시 (이름/팀 보완용)
+    cursor.execute("SELECT emp_id, name, team FROM users")
+    db_users = {row["emp_id"]: dict(row) for row in cursor.fetchall()}
+
+    for r in range(header_row_idx + 1, ws.max_row + 1):
+        row_vals = [ws.cell(r, c).value for c in range(1, ws.max_column + 1)]
+        str_vals = [str(v or "").strip() for v in row_vals]
+        if not any(str_vals) or any(str_vals[0].startswith(kw) for kw in ["합계", "총계", "전체"]):
+            continue
+
+        total_rows += 1
+
+        # 1. 사번 / 성명 추출
+        raw_emp = str_vals[emp_col - 1] if emp_col and emp_col <= len(str_vals) else ""
+        raw_name = str_vals[name_col - 1] if name_col and name_col <= len(str_vals) else ""
+
+        emp_id = ""
+        name = ""
+
+        if "(" in raw_emp and ")" in raw_emp:
+            m = re.search(r"^(.*?)\((.*?)\)", raw_emp)
+            if m:
+                name = m.group(1).strip()
+                emp_id = m.group(2).strip()
+        else:
+            emp_id = raw_emp.strip()
+            name = raw_name.strip()
+
+        if emp_id in db_users:
+            if not name:
+                name = db_users[emp_id]["name"]
+        elif not emp_id and name:
+            for uid, uinfo in db_users.items():
+                if uinfo["name"] == name:
+                    emp_id = uid
+                    break
+
+        if not emp_id:
+            errors.append({
+                "row": r,
+                "name": name or "-",
+                "emp_id": "-",
+                "reason": "사원번호(사번)를 식별할 수 없음"
+            })
+            skipped_count += 1
+            continue
+
+        # 2. 소속팀 추출 및 부서 필터링
+        team = str_vals[team_col - 1] if team_col and team_col <= len(str_vals) else ""
+        if not team and emp_id in db_users:
+            team = db_users[emp_id]["team"]
+
+        if valid_target_teams:
+            if team not in valid_target_teams:
+                ignored_teams_count += 1
+                skipped_count += 1
+                continue
+
+        # 3. 날짜 추출
+        start_date = ""
+        end_date = ""
+
+        if period_col and period_col <= len(str_vals):
+            p_val = str_vals[period_col - 1]
+            if "~" in p_val:
+                parts = p_val.split("~")
+                start_date = parts[0].strip()
+                end_date = parts[1].strip()
+            elif p_val:
+                start_date = p_val.strip()
+                end_date = p_val.strip()
+
+        if not start_date and start_col and start_col <= len(str_vals):
+            raw_s = ws.cell(r, start_col).value
+            if isinstance(raw_s, datetime):
+                start_date = raw_s.strftime("%Y-%m-%d")
+            elif raw_s:
+                start_date = str(raw_s).strip().split("T")[0].split(" ")[0]
+
+        if not end_date and end_col and end_col <= len(str_vals):
+            raw_e = ws.cell(r, end_col).value
+            if isinstance(raw_e, datetime):
+                end_date = raw_e.strftime("%Y-%m-%d")
+            elif raw_e:
+                end_date = str(raw_e).strip().split("T")[0].split(" ")[0]
+        elif not end_date:
+            end_date = start_date
+
+        def norm_date(d_str):
+            if not d_str: return ""
+            d_str = d_str.replace(".", "-").replace("/", "-")
+            m = re.search(r"(\d{4})[-_](\d{1,2})[-_](\d{1,2})", d_str)
+            if m:
+                return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+            return d_str
+
+        start_date = norm_date(start_date)
+        end_date = norm_date(end_date)
+
+        if not start_date or not end_date:
+            errors.append({
+                "row": r,
+                "name": name,
+                "emp_id": emp_id,
+                "reason": "근무기간 / 특근일자 날짜 형식이 올바르지 않음"
+            })
+            skipped_count += 1
+            continue
+
+        # 4. 기타 속성 추출
+        category = str_vals[cat_col - 1] if cat_col and cat_col <= len(str_vals) else "일반휴일"
+        if not category: category = "일반휴일"
+
+        project = str_vals[proj_col - 1] if proj_col and proj_col <= len(str_vals) else ""
+        location = str_vals[loc_col - 1] if loc_col and loc_col <= len(str_vals) else ""
+        reason = str_vals[reason_col - 1] if reason_col and reason_col <= len(str_vals) else ""
+
+        raw_b = str_vals[bonus_col - 1] if bonus_col and bonus_col <= len(str_vals) else "0"
+        bonus_point = 1 if raw_b in ["1", "예", "Y", "True", "O", "1건"] else 0
+
+        raw_p = str_vals[pre_deduct_col - 1] if pre_deduct_col and pre_deduct_col <= len(str_vals) else "0"
+        pre_deduct_point = 1 if raw_p in ["1", "예", "Y", "True", "O", "1건"] else 0
+
+        # 5. DB 중복 검사 및 갱신 / 신규 등록
+        cursor.execute("""
+            SELECT id FROM overtimes
+            WHERE emp_id = ? AND start_date = ? AND end_date = ? AND category = ?
+        """, (emp_id, start_date, end_date, category))
+        exist_row = cursor.fetchone()
+
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        if exist_row:
+            ot_id = exist_row["id"]
+            cursor.execute("""
+                UPDATE overtimes
+                SET user_name = ?, team = ?, project_no = ?, location = ?, reason = ?,
+                    bonus_granted = ?, is_pre_deduct = ?, updated_at = ?
+                WHERE id = ?
+            """, (name, team, project, location, reason, bonus_point, pre_deduct_point, now_str, ot_id))
+            updated_count += 1
+            log_audit(ot_id, "EXCEL_IMPORT_UPDATE", admin_emp_id or "ADMIN", "관리자", None, {"emp_id": emp_id, "start_date": start_date})
+        else:
+            cursor.execute("""
+                INSERT INTO overtimes (
+                    emp_id, user_name, team, category, start_date, end_date,
+                    project_no, location, reason, bonus_granted, is_pre_deduct,
+                    is_confirmed, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+            """, (emp_id, name, team, category, start_date, end_date, project, location, reason, bonus_point, pre_deduct_point, now_str, now_str))
+            ot_id = cursor.lastrowid
+            created_count += 1
+            log_audit(ot_id, "EXCEL_IMPORT_CREATE", admin_emp_id or "ADMIN", "관리자", None, {"emp_id": emp_id, "start_date": start_date})
+
+        processed_count += 1
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "success": True,
+        "total_rows": total_rows,
+        "processed_count": processed_count,
+        "created_count": created_count,
+        "updated_count": updated_count,
+        "skipped_count": skipped_count,
+        "ignored_teams_count": ignored_teams_count,
+        "errors": errors
+    }

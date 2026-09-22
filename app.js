@@ -36,8 +36,19 @@ let adminCalYear = new Date().getFullYear();
 let adminCalMonth = new Date().getMonth();
 let adminSelectedDate = null; // 'YYYY-MM-DD'
 
-// 부서별 필터 상태
-let selectedDeptFilter = ''; // ''이면 전체
+// 부서별 필터 상태 (복수 팀 선택 지원)
+let selectedDeptFilters = []; // []이면 전체 부서, ['PLC제어팀', '제어실'] 형태의 복수 팀 지원
+
+function getActiveDeptFilters() {
+  if (selectedDeptFilters && selectedDeptFilters.length > 0) {
+    return selectedDeptFilters;
+  }
+  const fVal = document.getElementById('filterTeam')?.value;
+  const sVal = document.getElementById('summaryTeamFilter')?.value;
+  if (fVal) return [fVal];
+  if (sVal) return [sVal];
+  return [];
+}
 
 // 정렬 상태
 let otSortCol = 'start_date';
@@ -1941,14 +1952,15 @@ async function loadAdminData() {
     const params = [];
     const startDate = document.getElementById('filterStartDate').value;
     const endDate = document.getElementById('filterEndDate').value;
-    const team = selectedDeptFilter || document.getElementById('filterTeam').value;
+    const activeDepts = getActiveDeptFilters();
+    const teamParam = activeDepts.join(',');
     const category = document.getElementById('filterCategory').value;
     const status = document.getElementById('filterStatus').value;
     const search = document.getElementById('filterSearch').value.trim();
 
     if (startDate) params.push(`start_date=${encodeURIComponent(startDate)}`);
     if (endDate) params.push(`end_date=${encodeURIComponent(endDate)}`);
-    if (team) params.push(`team=${encodeURIComponent(team)}`);
+    if (teamParam) params.push(`team=${encodeURIComponent(teamParam)}`);
     if (category) params.push(`category=${encodeURIComponent(category)}`);
     if (status === '0') {
       params.push('is_confirmed=0');
@@ -2055,7 +2067,7 @@ function renderSuperAdminTeamCards(list) {
 
   teams.forEach(tName => {
     const s = teamStats[tName];
-    const isSelected = (selectedDeptFilter === tName);
+    const isSelected = selectedDeptFilters.includes(tName);
     const card = document.createElement('div');
     card.className = `super-team-card ${isSelected ? 'active-team' : ''}`;
     
@@ -2079,15 +2091,16 @@ function renderSuperAdminTeamCards(list) {
     `;
 
     card.addEventListener('click', () => {
-      if (selectedDeptFilter === tName) {
-        selectedDeptFilter = ''; // 토글 해제
+      const idx = selectedDeptFilters.indexOf(tName);
+      if (idx >= 0) {
+        selectedDeptFilters.splice(idx, 1);
       } else {
-        selectedDeptFilter = tName;
+        selectedDeptFilters.push(tName);
       }
       const filterTeamEl = document.getElementById('filterTeam');
-      if (filterTeamEl) filterTeamEl.value = selectedDeptFilter;
+      if (filterTeamEl) filterTeamEl.value = (selectedDeptFilters.length === 1) ? selectedDeptFilters[0] : '';
       const summaryTeamEl = document.getElementById('summaryTeamFilter');
-      if (summaryTeamEl) summaryTeamEl.value = selectedDeptFilter;
+      if (summaryTeamEl) summaryTeamEl.value = (selectedDeptFilters.length === 1) ? selectedDeptFilters[0] : '';
 
       loadAdminData();
       loadAdminUserTable();
@@ -2137,27 +2150,36 @@ function renderDeptFilterPills() {
 
   // 1) 전체 칩
   const allPill = document.createElement('div');
-  allPill.className = `dept-pill ${selectedDeptFilter === '' ? 'active' : ''}`;
+  const isAllActive = (selectedDeptFilters.length === 0 && !sel.value);
+  allPill.className = `dept-pill ${isAllActive ? 'active' : ''}`;
   allPill.innerHTML = `전체 부서 <span class="count-badge">${lastFetchedOvertimes.length}건</span>`;
   allPill.addEventListener('click', () => {
-    selectedDeptFilter = '';
+    selectedDeptFilters = [];
     sel.value = '';
+    const summaryTeamEl = document.getElementById('summaryTeamFilter');
+    if (summaryTeamEl) summaryTeamEl.value = '';
     loadAdminData();
+    loadAdminUserTable();
   });
   container.appendChild(allPill);
 
   // 2) 부서별 칩
   teams.forEach(t => {
     const p = document.createElement('div');
-    const isAct = selectedDeptFilter === t;
+    const isAct = selectedDeptFilters.includes(t);
     p.className = `dept-pill ${isAct ? 'active' : ''}`;
     const info = deptCounts[t];
     p.innerHTML = `${t} <span class="count-badge">${info.overtimes}건 / ${info.users}명</span>`;
     p.addEventListener('click', () => {
-      selectedDeptFilter = isAct ? '' : t;
-      sel.value = selectedDeptFilter;
+      const idx = selectedDeptFilters.indexOf(t);
+      if (idx >= 0) {
+        selectedDeptFilters.splice(idx, 1);
+      } else {
+        selectedDeptFilters.push(t);
+      }
+      sel.value = (selectedDeptFilters.length === 1) ? selectedDeptFilters[0] : '';
       const summaryTeamEl = document.getElementById('summaryTeamFilter');
-      if (summaryTeamEl) summaryTeamEl.value = selectedDeptFilter;
+      if (summaryTeamEl) summaryTeamEl.value = (selectedDeptFilters.length === 1) ? selectedDeptFilters[0] : '';
 
       loadAdminData();
       loadAdminUserTable();
@@ -5362,6 +5384,100 @@ if (suggestionFilterStatus) {
 const btnRefreshSuggestions = document.getElementById('btnRefreshSuggestions');
 if (btnRefreshSuggestions) {
   btnRefreshSuggestions.addEventListener('click', loadSuggestions);
+}
+
+// ===== 16. 특근 엑셀 가져오기 (importOvertimeExcelBtn / overtimeExcelFileInput) =====
+const importOvertimeExcelBtn = document.getElementById('importOvertimeExcelBtn');
+const overtimeExcelFileInput = document.getElementById('overtimeExcelFileInput');
+
+if (importOvertimeExcelBtn && overtimeExcelFileInput) {
+  importOvertimeExcelBtn.addEventListener('click', () => {
+    overtimeExcelFileInput.click();
+  });
+
+  overtimeExcelFileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const activeDepts = getActiveDeptFilters();
+    showToast('특근 엑셀 데이터를 검증 및 가져오는 중입니다...', 'info');
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const base64Data = evt.target.result.split(',')[1] || evt.target.result;
+        const res = await fetch('/api/overtimes/import-excel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            file_b64: base64Data,
+            target_teams: activeDepts.join(','),
+            admin_emp_id: currentUser ? currentUser.emp_id : ''
+          })
+        });
+        const data = await res.json();
+        overtimeExcelFileInput.value = '';
+
+        if (!res.ok || !data.success) {
+          showToast(`엑셀 가져오기 실패: ${data.message || data.detail || '오류 발생'}`, 'error');
+          return;
+        }
+
+        showExcelImportResultModal(data, activeDepts);
+        loadAdminData();
+        loadAdminUserTable();
+      } catch (err) {
+        console.error(err);
+        overtimeExcelFileInput.value = '';
+        showToast('엑셀 업로드 중 통신 오류가 발생했습니다.', 'error');
+      }
+    };
+    reader.onerror = () => {
+      overtimeExcelFileInput.value = '';
+      showToast('엑셀 파일을 읽는 도중 오류가 발생했습니다.', 'error');
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function showExcelImportResultModal(data, activeDepts) {
+  const modal = document.getElementById('excelImportResultModal');
+  const summaryDiv = document.getElementById('importResultSummary');
+  const logTbody = document.getElementById('importResultLogTbody');
+  if (!modal || !summaryDiv || !logTbody) return;
+
+  const targetLabel = activeDepts.length > 0 ? activeDepts.join(', ') : '전체 부서';
+  summaryDiv.innerHTML = `
+    <div class="badge" style="background:#e0e7ff; color:#3730a3; padding:6px 12px; font-size:0.82rem;">🏢 처리 대상: ${escapeHtml(targetLabel)}</div>
+    <div class="badge" style="background:#f1f5f9; color:#334155; padding:6px 12px; font-size:0.82rem;">📄 총 읽은 행: ${data.total_rows}건</div>
+    <div class="badge" style="background:#dcfce7; color:#15803d; padding:6px 12px; font-size:0.82rem;">✅ 신규 생성: ${data.created_count}건</div>
+    <div class="badge" style="background:#dbeafe; color:#1d4ed8; padding:6px 12px; font-size:0.82rem;">🔄 기존 갱신: ${data.updated_count}건</div>
+    <div class="badge" style="background:#fef3c7; color:#b45309; padding:6px 12px; font-size:0.82rem;">🛡️ 타부서 제외: ${data.ignored_teams_count}건</div>
+    <div class="badge" style="background:${data.errors.length > 0 ? '#fee2e2' : '#f1f5f9'}; color:${data.errors.length > 0 ? '#991b1b' : '#64748b'}; padding:6px 12px; font-size:0.82rem;">⚠️ 오류/제외: ${data.errors.length}건</div>
+  `;
+
+  logTbody.innerHTML = '';
+  if (data.errors && data.errors.length > 0) {
+    data.errors.forEach(err => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="text-align:center; font-weight:700;">${err.row}행</td>
+        <td>${escapeHtml(err.name || '-')} (${escapeHtml(err.emp_id || '-')})</td>
+        <td style="color:var(--danger); font-weight:600;">⚠️ ${escapeHtml(err.reason)}</td>
+      `;
+      logTbody.appendChild(tr);
+    });
+  } else {
+    logTbody.innerHTML = `
+      <tr>
+        <td colspan="3" style="text-align:center; color:var(--success); padding: 1.5rem; font-weight:700;">
+          🎉 오류 항목 없이 모든 데이터가 100% 정상적으로 가져오기 처리되었습니다!
+        </td>
+      </tr>
+    `;
+  }
+
+  modal.style.display = 'flex';
 }
 
 window.openSuggestionModal = openSuggestionModal;
