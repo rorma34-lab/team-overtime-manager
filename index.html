@@ -17,16 +17,21 @@
       return;
     }
 
+    var btn = document.getElementById('loginSubmitBtn');
+    if (btn) btn.disabled = true;
+
     var attempts = 0;
     function tryExecLogin() {
       var fn = window.handleLogin || (typeof handleLogin === 'function' ? handleLogin : null);
       if (fn) {
+        if (btn) btn.disabled = false;
         fn(v);
-      } else if (attempts < 20) {
+      } else if (attempts < 40) {
         attempts++;
         setTimeout(tryExecLogin, 250);
       } else {
-        alert('🚨 [시스템 접속 안내]\n\n최신 v1.49 소스코드가 서버에 업데이트(Git Push) 중이거나 브라우저 캐시를 읽고 있습니다.\n\n[해결 방법]\n1. 깃허브(GitHub)에 최신 파일 커밋 & 푸시를 진행해 주세요.\n2. 키보드의 [Ctrl + F5]를 눌러 캐시를 새로고침 해 주세요.');
+        if (btn) btn.disabled = false;
+        alert('🚨 [시스템 접속 안내]\n\n서버 통신 지연 또는 브라우저 캐시가 남아 있습니다.\n\n[해결 방법]\n1. 키보드의 [Ctrl + F5]를 눌러 새로고침 후 다시 시도해 주세요.\n2. 사원번호가 올바른지 확인해 주세요.');
       }
     }
     tryExecLogin();
@@ -2065,9 +2070,10 @@
   <!-- 토스트 메시지 컨테이너 -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <!-- 클라이언트 사이드 고속 엑셀 생성 라이브러리 (SheetJS) -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- 메인 애플리케이션 스크립트 -->
   <script src="/app.js?v=20260922_v149"></script>
   <script src="/js/app.js?v=20260922_v149"></script>
+  <!-- 클라이언트 사이드 고속 엑셀 생성 라이브러리 (SheetJS - 비동기 로딩) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 </body>
 </html>

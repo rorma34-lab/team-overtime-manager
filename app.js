@@ -394,8 +394,7 @@ async function handleLogin(empId) {
     showToast('서버와 통신할 수 없습니다.', 'error');
   }
 }
-
-const registerForm = document.getElementById('registerForm');
+window.handleLogin = handleLogin;
 registerForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const empId = document.getElementById('regEmpId').value.trim();
