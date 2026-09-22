@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 import shutil
 from pathlib import Path
@@ -43,9 +43,9 @@ def get_font(size, bold=False):
 CANVAS_W = 1600
 CANVAS_H = 1100
 
-# ----------------- 지시선 및 사용자용 친절한 말풍선 핀 헬퍼 (v1.47 고해상도 & 고시인성) -----------------
+# ----------------- 지시선 및 사용자용 친절한 말풍선 핀 헬퍼 (v1.54 고해상도 & 고시인성) -----------------
 
-def draw_browser_frame(d, title="★ 스마트 특근 관리 시스템 (v1.47)", url="https://overtime-system.internal"):
+def draw_browser_frame(d, title="★ 스마트 특근 관리 시스템 (v1.54)", url="https://overtime-system.internal"):
     """
     1600x1100 캔버스 상단에 실제 브라우저 형태의 프레임과 주소창, 릴리즈 배지를 렌더링
     """
@@ -60,7 +60,7 @@ def draw_browser_frame(d, title="★ 스마트 특근 관리 시스템 (v1.47)",
     d.text((1010, 38), title, font=get_font(18, bold=True), fill="#f8fafc")
     # 최신 버전 배지
     d.rounded_rectangle([1450, 32, 1560, 68], radius=6, fill="#0d9488")
-    d.text((1505, 50), "v1.47 최신", font=get_font(16, bold=True), fill="#ffffff", anchor="mm")
+    d.text((1505, 50), "v1.54 최신", font=get_font(16, bold=True), fill="#ffffff", anchor="mm")
 
 
 def draw_smart_pin(d, target_xy, pin_xy, badge_num, label_text, color="#ea580c", text_color="#ffffff", sub_hint=None):
@@ -231,7 +231,7 @@ def create_mockup_login():
     d.text((800, 977), "※ 사원번호는 6자리 숫자로 입력해야 정상 처리됩니다 (총괄관리자 제외)", font=get_font(16), fill="#475569", anchor="mm")
 
     # 스마트 지시선 배치 (충돌 0%)
-    draw_smart_pin(d, (1505, 70), (1350, 125), "①", "v1.47 최신 버전 배지", color="#0284c7", sub_hint="최신 릴리즈 확인")
+    draw_smart_pin(d, (1505, 70), (1350, 125), "①", "v1.53 최신 버전 배지", color="#0284c7", sub_hint="최신 릴리즈 확인")
     draw_smart_pin(d, (500, 560), (220, 560), "②", "6자리 숫자 사번 입력창", color="#ea580c", sub_hint="[안내] 6자리 숫자 필수")
     draw_smart_pin(d, (1100, 690), (1380, 690), "③", "[입장하기] 원클릭!", color="#16a34a", sub_hint="즉시 대시보드 입장")
     draw_smart_pin(d, (500, 850), (220, 850), "④", "신규 사원 즉시 등록", color="#9333ea", sub_hint="성명 및 소속 부서 선택")
@@ -357,7 +357,7 @@ def create_mockup_my_records():
     d.text((145, 450), "[휴가] 대체휴일 쉰 날: 2026-09-25 (금)  (1.0일 쉼 / 자동 차감 적용)", font=get_font(19, bold=True), fill="#b45309")
     d.text((145, 480), "※ 주말 특근 대신 평일에 하루 쉰 날로, 최종 정산 시 1.0일이 자동 차감 계산됩니다.", font=get_font(15), fill="#92400e")
 
-    # v1.44: 실특근 완료 후 확정 피드백 버튼
+    # v1.53: 실특근 완료 후 확정 피드백 버튼
     d.rounded_rectangle([1080, 445, 1245, 500], radius=6, fill="#0d9488")
     d.text((1162, 472), "🎯 [특근확정]", font=get_font(17, bold=True), fill="#ffffff", anchor="mm")
 
@@ -565,13 +565,13 @@ def create_mockup_settlement():
     """삽화 6: 실특근 정산 및 자동 계산 목업"""
     img = Image.new("RGB", (CANVAS_W, CANVAS_H), "#f8fafc")
     d = ImageDraw.Draw(img)
-    draw_browser_frame(d, title="★ 스마트 특근 관리 시스템  |  실특근 정산 및 자동 계산 (v1.47)", url="https://overtime.company.com/admin/settlement")
+    draw_browser_frame(d, title="★ 스마트 특근 관리 시스템  |  실특근 정산 및 자동 계산 (v1.53)", url="https://overtime.company.com/admin/settlement")
 
     d.rounded_rectangle([40, 105, 1560, 1060], radius=16, fill="#ffffff", outline="#cbd5e1", width=2)
 
     # 공식 배너
     d.rounded_rectangle([80, 125, 1520, 235], radius=12, fill="#ecfdf5", outline="#10b981", width=3)
-    d.text((115, 145), "★ 컴퓨터가 1초 만에 자동 산출하는 진짜 일한 날(최종 실특근) 공식! (v1.43 개편)", font=get_font(22, bold=True), fill="#065f46")
+    d.text((115, 145), "★ 컴퓨터가 1초 만에 자동 산출하는 진짜 일한 날(최종 실특근) 공식! (v1.53 개편)", font=get_font(22, bold=True), fill="#065f46")
     d.text((115, 185), "최종 실특근일 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무 시 출장기간 내 사전차감)", font=get_font(20, bold=True), fill="#047857")
 
     # 팀 카드 (y축 280부터 시작하여 상단 여백 확보)
@@ -833,14 +833,14 @@ def build_user_presentation(images):
     tf1.word_wrap = True
 
     p1_tag = tf1.paragraphs[0]
-    p1_tag.text = "SMART OVERTIME SYSTEM v1.47  |  일반 사원 전용 공식 매뉴얼"
+    p1_tag.text = "SMART OVERTIME SYSTEM v1.53  |  일반 사원 전용 공식 매뉴얼"
     p1_tag.font.size = Pt(14)
     p1_tag.font.bold = True
     p1_tag.font.color.rgb = RGBColor(253, 186, 116)
     p1_tag.space_after = Pt(14)
 
     p1_title = tf1.add_paragraph()
-    p1_title.text = "스마트 특근 관리 시스템\n사용자 전용 기능 매뉴얼 (v1.47)"
+    p1_title.text = "스마트 특근 관리 시스템\n사용자 전용 기능 매뉴얼 (v1.53)"
     p1_title.font.size = Pt(36)
     p1_title.font.bold = True
     p1_title.font.color.rgb = RGBColor(255, 255, 255)
@@ -853,7 +853,7 @@ def build_user_presentation(images):
     p1_sub.space_after = Pt(24)
 
     p1_auth = tf1.add_paragraph()
-    p1_auth.text = "배포 버전: v1.47 (2026-09-21)  |  PC 모니터 & 스마트폰(모바일) 완벽 지원"
+    p1_auth.text = "배포 버전: v1.53 (2026-09-21)  |  PC 모니터 & 스마트폰(모바일) 완벽 지원"
     p1_auth.font.size = Pt(13)
     p1_auth.font.color.rgb = RGBColor(148, 163, 184)
 
@@ -958,7 +958,7 @@ def build_user_presentation(images):
 
     # --- SLIDE 4: 3단계 - 사번만 넣고 슝 들어가기 ---
     s4_data = [
-        ("① v1.47 최신 버전 배지 확인", "화면 오른쪽 위에 청록색 [v1.47] 배지가 보이면 최신 버전입니다. 클릭 시 신규 릴리즈 이력이 표시됩니다."),
+        ("① v1.53 최신 버전 배지 확인", "화면 오른쪽 위에 청록색 [v1.53] 배지가 보이면 최신 버전입니다. 클릭 시 신규 릴리즈 이력이 표시됩니다."),
         ("② 사원번호 6자리 숫자 입력", "본인의 6자리 사원번호를 입력창에 기재합니다. 복잡한 비밀번호 없이 빠르게 입장 가능합니다."),
         ("③ [입장하기] 원클릭 이동", "입력 후 [입장하기]를 누르면 등록된 이름과 소속팀이 자동 확인되어 대시보드로 즉시 입장합니다."),
         ("④ 미등록 사번 1초 즉시 등록", "처음 방문한 사번은 신규 등록창이 나타나며, 성명과 소속 부서를 선택하면 즉시 등록되어 입장합니다.")
@@ -1059,13 +1059,13 @@ def build_user_presentation(images):
     ]
     add_visual_slide(prs, "06", "나의 특근 신청 내역 및 다차원 검색", "다양한 검색 조건과 개인 달력 뷰로 본인의 특근 일정을 편리하게 확인합니다.", s7_data, images["my"])
 
-    # --- SLIDE 8: 7단계 - 4단계 특근 라이프사이클 & 특근 완료 후 [확정] 피드백 (v1.44 신규) ---
+    # --- SLIDE 8: 7단계 - 4단계 특근 라이프사이클 & 특근 완료 후 [확정] 피드백 (v1.53 신규) ---
     s8 = prs.slides.add_slide(blank_layout)
     header_tb8 = s8.shapes.add_textbox(Inches(0.8), Inches(0.4), Inches(11.7), Inches(1.1))
     htf8 = header_tb8.text_frame
     htf8.word_wrap = True
     p8_step = htf8.paragraphs[0]
-    p8_step.text = "STEP 07  |  특근 4단계 라이프사이클 & 사원 [확정] 피드백 (v1.47 최신)"
+    p8_step.text = "STEP 07  |  특근 4단계 라이프사이클 & 사원 [확정] 피드백 (v1.53 최신)"
     p8_step.font.size = Pt(12)
     p8_step.font.bold = True
     p8_step.font.color.rgb = COLOR_ACCENT
@@ -1133,13 +1133,13 @@ def build_user_presentation(images):
         p3.font.color.rgb = COLOR_TEXT_MAIN
         p3.line_spacing = 1.35
 
-    # --- SLIDE 9: 8단계 - 사원 전용 100% 무기명 건의사항 소통함 (v1.44 신규) ---
+    # --- SLIDE 9: 8단계 - 사원 전용 100% 무기명 건의사항 소통함 (v1.53 신규) ---
     s9_sug = prs.slides.add_slide(blank_layout)
     header_tb9_sug = s9_sug.shapes.add_textbox(Inches(0.8), Inches(0.4), Inches(11.7), Inches(1.1))
     htf9_sug = header_tb9_sug.text_frame
     htf9_sug.word_wrap = True
     p9_step = htf9_sug.paragraphs[0]
-    p9_step.text = "STEP 08  |  사원 전용 100% 무기명 건의사항 소통함 (v1.47)"
+    p9_step.text = "STEP 08  |  사원 전용 100% 무기명 건의사항 소통함 (v1.53)"
     p9_step.font.size = Pt(12)
     p9_step.font.bold = True
     p9_step.font.color.rgb = COLOR_ACCENT
@@ -1271,7 +1271,7 @@ def build_user_presentation(images):
     htf11 = header_tb11.text_frame
     htf11.word_wrap = True
     p_step11 = htf11.paragraphs[0]
-    p_step11.text = "SUMMARY & Q&A  |  사용자 자주 묻는 질문 답변 (v1.47)"
+    p_step11.text = "SUMMARY & Q&A  |  사용자 자주 묻는 질문 답변 (v1.53)"
     p_step11.font.size = Pt(12)
     p_step11.font.bold = True
     p_step11.font.color.rgb = COLOR_ACCENT
@@ -1345,14 +1345,14 @@ def build_admin_presentation(images):
     tf1.word_wrap = True
 
     p1_tag = tf1.paragraphs[0]
-    p1_tag.text = "SMART OVERTIME SYSTEM v1.47  |  관리자 및 운영자 전용 가이드"
+    p1_tag.text = "SMART OVERTIME SYSTEM v1.53  |  관리자 및 운영자 전용 가이드"
     p1_tag.font.size = Pt(14)
     p1_tag.font.bold = True
     p1_tag.font.color.rgb = RGBColor(253, 186, 116)
     p1_tag.space_after = Pt(14)
 
     p1_title = tf1.add_paragraph()
-    p1_title.text = "스마트 특근 관리 시스템\n관리자 모드 운영 매뉴얼 (v1.47)"
+    p1_title.text = "스마트 특근 관리 시스템\n관리자 모드 운영 매뉴얼 (v1.53)"
     p1_title.font.size = Pt(36)
     p1_title.font.bold = True
     p1_title.font.color.rgb = RGBColor(255, 255, 255)
@@ -1365,7 +1365,7 @@ def build_admin_presentation(images):
     p1_sub.space_after = Pt(28)
 
     p1_auth = tf1.add_paragraph()
-    p1_auth.text = "배포 버전: v1.47 (2026-09-21)  |  총괄 슈퍼관리자 및 부서 팀관리자 전용"
+    p1_auth.text = "배포 버전: v1.53 (2026-09-21)  |  총괄 슈퍼관리자 및 부서 팀관리자 전용"
     p1_auth.font.size = Pt(13)
     p1_auth.font.color.rgb = RGBColor(148, 163, 184)
 
@@ -1507,9 +1507,9 @@ def build_admin_presentation(images):
     ]
     add_visual_slide(prs, "04", "[관리자 모드] 팀원 명부 및 소속팀 관리", "팀원 정보 수정, 팀관리자 권한 토글 및 소속팀 관리를 지원합니다.", s5_data, images["user"])
 
-    # --- SLIDE 6: 실특근 자동 산정 및 정산표 (v1.43 개편) ---
+    # --- SLIDE 6: 실특근 자동 산정 및 정산표 (v1.53 개편) ---
     s6_data = [
-        ("① 최신 실특근 산정 공식 (v1.44)", "★ 총특근일수 = 대체근무 + 법정휴일 + 일반휴일 (대체휴무 제외 표준화)\n★ 최종 실특근일 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무시 출장기간 내 사전차감)"),
+        ("① 최신 실특근 산정 공식 (v1.53)", "★ 총특근일수 = 대체근무 + 법정휴일 + 일반휴일 (대체휴무 제외 표준화)\n★ 최종 실특근일 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무시 출장기간 내 사전차감)"),
         ("② 사전차감 잔여수 & 보너스 건수", "★ 사전차감 잔여수 = 총 사전차감수 - 출장기간 내 사전차감수 / 사원별 [보너스 부여 (건)] 개수 독립 산출"),
         ("③ 개인별 정산 및 통계 팝업 개편", "사원별 최근 3개월(7/8/9월), 1~4분기, 상/하반기, 연도별 집계와 사전차감 잔여수 독립 제공"),
         ("④ 정산표 엑셀 원클릭 추출 & 수식 명시", "엑셀 중복 '대체휴가 사용일수' 제거, 헤더에 산출 수식 및 취합 기간/일시 자동 명기")
@@ -1525,13 +1525,13 @@ def build_admin_presentation(images):
     ]
     add_visual_slide(prs, "06", "보너스 수정 · 일괄 삭제 및 엑셀 정산", "관리자 보너스 관리, 일괄 삭제 및 엑셀 정산표를 완벽히 지원합니다.", s7_data, images["excel"])
 
-    # --- SLIDE 8: 특근 4단계 검증 체계 및 관리자 [검토완료] (v1.44 신규) ---
+    # --- SLIDE 8: 특근 4단계 검증 체계 및 관리자 [검토완료] (v1.53 신규) ---
     s8_admin = prs.slides.add_slide(blank_layout)
     header_tb8_adm = s8_admin.shapes.add_textbox(Inches(0.8), Inches(0.4), Inches(11.7), Inches(1.1))
     htf8_adm = header_tb8_adm.text_frame
     htf8_adm.word_wrap = True
     p8_step_adm = htf8_adm.paragraphs[0]
-    p8_step_adm.text = "STEP 07  |  특근 확정 · 검토 종합 관리 및 개별 제어 (v1.47 최신)"
+    p8_step_adm.text = "STEP 07  |  특근 확정 · 검토 종합 관리 및 개별 제어 (v1.53 최신)"
     p8_step_adm.font.size = Pt(12)
     p8_step_adm.font.bold = True
     p8_step_adm.font.color.rgb = COLOR_ACCENT
@@ -1553,7 +1553,7 @@ def build_admin_presentation(images):
          "• 승인: [✓ 승인] ↔ [✕ 취소] 자유 전환\n"
          "• 확정: [🎯 확정] ↔ [✕ 확정취소] 독립 제어\n"
          "• 검토: [🟣 검토완료] ↔ [✕ 검토취소] 최종 마감\n"
-         "• 상태별 배지(승인, 확정, 검토)가 한눈에 표시됩니다.",
+         "• 대체휴무(휴가): 4단계 절차가 자동 생략되어 등록 즉시 [🌿 대체휴무]로 자동 반영됩니다.",
          "#eff6ff", "#2563eb"),
         ("2. 관리자 특근 수정 모달 상태 직접 설정",
          "• 테이블에서 [수정] 버튼 클릭 시 나타나는 [관리자 특근 수정 모달]에 '진행 상태 관리' 신설\n"
@@ -1601,13 +1601,13 @@ def build_admin_presentation(images):
         p3.font.color.rgb = COLOR_TEXT_MAIN
         p3.line_spacing = 1.35
 
-    # --- SLIDE 9: 특근정보 엑셀 내보내기 4단계 구분 집계 (v1.44 신규) ---
+    # --- SLIDE 9: 특근정보 엑셀 내보내기 4단계 구분 집계 (v1.53 신규) ---
     s9_admin_excel = prs.slides.add_slide(blank_layout)
     header_tb9_excel = s9_admin_excel.shapes.add_textbox(Inches(0.8), Inches(0.4), Inches(11.7), Inches(1.1))
     htf9_excel = header_tb9_excel.text_frame
     htf9_excel.word_wrap = True
     p9_step_excel = htf9_excel.paragraphs[0]
-    p9_step_excel.text = "STEP 08  |  특근정보 엑셀 내보내기 4단계 구분 집계 (v1.47)"
+    p9_step_excel.text = "STEP 08  |  특근정보 엑셀 내보내기 4단계 구분 집계 (v1.53)"
     p9_step_excel.font.size = Pt(12)
     p9_step_excel.font.bold = True
     p9_step_excel.font.color.rgb = COLOR_ACCENT
@@ -1673,13 +1673,13 @@ def build_admin_presentation(images):
         p3.font.color.rgb = COLOR_TEXT_MAIN
         p3.line_spacing = 1.35
 
-    # --- SLIDE 10: 사원 무기명 건의사항 소통함 운영 및 공식 답변 (v1.44 신규) ---
+    # --- SLIDE 10: 사원 무기명 건의사항 소통함 운영 및 공식 답변 (v1.53 신규) ---
     s10_admin_sug = prs.slides.add_slide(blank_layout)
     header_tb10_sug = s10_admin_sug.shapes.add_textbox(Inches(0.8), Inches(0.4), Inches(11.7), Inches(1.1))
     htf10_sug = header_tb10_sug.text_frame
     htf10_sug.word_wrap = True
     p10_step_sug = htf10_sug.paragraphs[0]
-    p10_step_sug.text = "STEP 09  |  사원 무기명 건의사항 소통함 운영 & 답변 (v1.47)"
+    p10_step_sug.text = "STEP 09  |  사원 무기명 건의사항 소통함 운영 & 답변 (v1.53)"
     p10_step_sug.font.size = Pt(12)
     p10_step_sug.font.bold = True
     p10_step_sug.font.color.rgb = COLOR_ACCENT
@@ -1936,7 +1936,7 @@ def build_admin_presentation(images):
     p_step10.font.color.rgb = COLOR_ACCENT
 
     p_title10 = htf10.add_paragraph()
-    p_title10.text = "자주 묻는 질문(Q&A)과 관리자 운영 꿀팁 총정리 (v1.47)"
+    p_title10.text = "자주 묻는 질문(Q&A)과 관리자 운영 꿀팁 총정리 (v1.53)"
     p_title10.font.size = Pt(22)
     p_title10.font.bold = True
     p_title10.font.color.rgb = COLOR_PRIMARY
@@ -1951,8 +1951,8 @@ def build_admin_presentation(images):
         ("Q2. 팀원 대리 신청 시 비밀 보너스는 사원에게 노출되나요?", "사원 화면 및 API 응답에서는 0으로 마스킹되어 사원은 전혀 모르며, 오직 관리자와 엑셀 원장에만 기재됩니다."),
         ("Q3. 팀관리자와 총괄관리자의 권한 차이는 어떻게 되나요?", "팀관리자는 본인 팀원의 승인/수정만 가능하며, 팀원 소속팀 변경, 슈퍼관리자 승격/하야 지정은 오직 총괄관리자만 가능합니다."),
         ("Q4. 승인 완료된 특근을 사원이 임의로 수정하거나 삭제할 수 있나요?", "아닙니다. v1.42부터 승인된 특근은 일반 사원의 수정/삭제가 원천 차단되며, 오직 관리자 모드에서 관리자만 수정 또는 삭제할 수 있습니다."),
-        ("Q5. 서버가 재부팅되어도 인원과 특근 데이터가 영구 보존되나요?", "네! Turso 클라우드 영구 DB 연동으로 모든 데이터가 안전 보존되며, v1.47의 안전 스마트 폴백과 스레드 보호로 특근 신청과 데이터 무결성을 완벽하게 보장합니다."),
-        ("Q6. 특근 승인과 확정은 어떻게 운영되나요?", "v1.47부터 특근 승인과 확정은 완전히 독립 분리되었습니다. 관리자 사전 승인이 없어도 사원이 특근 완료 후 즉시 [특근완료 확정]을 할 수 있으며, 관리자는 테이블/캘린더/수정모달에서 승인, 확정, 검토완료를 각각 개별 제어 및 취소할 수 있습니다."),
+        ("Q5. 서버가 재부팅되어도 인원과 특근 데이터가 영구 보존되나요?", "네! Turso 클라우드 영구 DB 연동으로 모든 데이터가 안전 보존되며, v1.53의 안전 스마트 폴백과 스레드 보호로 특근 신청과 데이터 무결성을 완벽하게 보장합니다."),
+        ("Q6. 특근 승인과 확정은 어떻게 운영되나요?", "v1.53부터 특근 승인과 확정은 완전히 독립 분리되었습니다. 관리자 사전 승인이 없어도 사원이 특근 완료 후 즉시 [특근완료 확정]을 할 수 있으며, 관리자는 테이블/캘린더/수정모달에서 승인, 확정, 검토완료를 각각 개별 제어 및 취소할 수 있습니다."),
         ("Q7. 엑셀 내보내기에서 4단계 특근일수는 어떻게 구분되어 나오나요?", "Sheet 1에는 4단계 진행상태와 승인/확정/검토자가 명시되며, Sheet 2 개인별 정산표 및 Sheet 4 부서별 요약에 신청·승인·확정·검토완료 일수가 각각 독립 열로 자동 집계됩니다."),
         ("Q8. 무기명 건의사항 소통함에서 관리자는 어떤 관리를 하나요?", "사원들이 무기명으로 접수한 모든 건의사항에 대해 조치 상태(접수완료/검토중/처리완료/보류)를 갱신하고 공식 답변을 등록하거나 부적절한 게시물을 삭제 관리합니다.")
     ]
