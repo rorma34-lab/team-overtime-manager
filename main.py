@@ -1,4 +1,5 @@
 import os
+import shutil
 import json
 import socket
 import io
@@ -2816,17 +2817,29 @@ def download_manual(type: str = Query("user", description="user 또는 admin")):
 (BASE_DIR / "js").mkdir(exist_ok=True)
 (BASE_DIR / "downloads").mkdir(exist_ok=True)
 
-if (BASE_DIR / "style.css").exists() and not (BASE_DIR / "css" / "style.css").exists():
-    import shutil
-    shutil.copy(str(BASE_DIR / "style.css"), str(BASE_DIR / "css" / "style.css"))
+# 항상 최신 루트 소스로 하위/미러 폴더 자동 강제 동기화
+try:
+    if (BASE_DIR / "style.css").exists():
+        shutil.copy(str(BASE_DIR / "style.css"), str(BASE_DIR / "css" / "style.css"))
+        if (BASE_DIR / "static").exists():
+            shutil.copy(str(BASE_DIR / "style.css"), str(BASE_DIR / "static" / "style.css"))
 
-if (BASE_DIR / "app.js").exists() and not (BASE_DIR / "js" / "app.js").exists():
-    import shutil
-    shutil.copy(str(BASE_DIR / "app.js"), str(BASE_DIR / "js" / "app.js"))
+    if (BASE_DIR / "app.js").exists():
+        shutil.copy(str(BASE_DIR / "app.js"), str(BASE_DIR / "js" / "app.js"))
+        if (BASE_DIR / "static" / "js").exists():
+            shutil.copy(str(BASE_DIR / "app.js"), str(BASE_DIR / "static" / "js" / "app.js"))
+        if (BASE_DIR / "static").exists():
+            shutil.copy(str(BASE_DIR / "app.js"), str(BASE_DIR / "static" / "app.js"))
+
+    if (BASE_DIR / "index.html").exists():
+        if (BASE_DIR / "static").exists():
+            shutil.copy(str(BASE_DIR / "index.html"), str(BASE_DIR / "static" / "index.html"))
+except Exception as sync_e:
+    print(f"[File Sync Notice] {sync_e}")
 
 @app.get("/")
 def serve_index():
-    return FileResponse(str(BASE_DIR / "index.html"))
+    return FileResponse(str(BASE_DIR / "index.html"), headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 @app.get("/favicon.ico")
 def serve_favicon():
@@ -2835,16 +2848,12 @@ def serve_favicon():
 @app.get("/style.css")
 @app.get("/css/style.css")
 def serve_css():
-    if (BASE_DIR / "css" / "style.css").exists():
-        return FileResponse(str(BASE_DIR / "css" / "style.css"), media_type="text/css")
-    return FileResponse(str(BASE_DIR / "style.css"), media_type="text/css")
+    return FileResponse(str(BASE_DIR / "style.css"), media_type="text/css", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 @app.get("/app.js")
 @app.get("/js/app.js")
 def serve_js():
-    if (BASE_DIR / "js" / "app.js").exists():
-        return FileResponse(str(BASE_DIR / "js" / "app.js"), media_type="application/javascript")
-    return FileResponse(str(BASE_DIR / "app.js"), media_type="application/javascript")
+    return FileResponse(str(BASE_DIR / "app.js"), media_type="application/javascript", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 app.mount("/css", StaticFiles(directory=str(BASE_DIR / "css")), name="css")
 app.mount("/js", StaticFiles(directory=str(BASE_DIR / "js")), name="js")

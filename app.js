@@ -5945,3 +5945,14 @@ window.deselectAllTeamFilters = function() {
   loadAdminUserTable();
   if (typeof loadSettlementSummary === 'function') loadSettlementSummary();
 };
+
+// ===== 전역 창 핸들러 바인딩 (HTML doLogin 및 인라인 이벤트 호환성 보장) =====
+window.handleLogin = handleLogin;
+window.setUserSession = setUserSession;
+window.logout = logout;
+window.triggerOvertimeExcelImport = triggerOvertimeExcelImport;
+window.triggerUserExcelImport = triggerUserExcelImport;
+window.handleOvertimeExcelFileSelected = handleOvertimeExcelFileSelected;
+window.handleUserExcelFileSelected = handleUserExcelFileSelected;
+window.selectAllTeamFilters = selectAllTeamFilters;
+window.deselectAllTeamFilters = deselectAllTeamFilters;

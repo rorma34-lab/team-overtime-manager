@@ -9,21 +9,24 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⏰</text></svg>">
   <script>
   function doLogin() {
-    var v = document.getElementById('empIdInput').value.trim();
+    var inputEl = document.getElementById('empIdInput');
+    var v = inputEl ? inputEl.value.trim() : '';
     if (!v) {
       alert('사원번호를 입력해 주세요.');
       return;
     }
-    if (typeof handleLogin === 'function') {
-      handleLogin(v);
+    var fn = window.handleLogin || (typeof handleLogin === 'function' ? handleLogin : null);
+    if (fn) {
+      fn(v);
     } else {
       setTimeout(function() {
-        if (typeof handleLogin === 'function') {
-          handleLogin(v);
+        var fn2 = window.handleLogin || (typeof handleLogin === 'function' ? handleLogin : null);
+        if (fn2) {
+          fn2(v);
         } else {
-          alert('시스템 로딩 중입니다. 잠시 후 다시 시도해 주세요.');
+          alert('🚨 [시스템 로딩 중 안내]\n\n브라우저에 이전 캐시 데이터가 남아 있거나 스크립트 로드 중입니다.\n\n[해결 방법]\n키보드의 [F5] 또는 [Ctrl + F5]를 눌러 브라우저를 새로고침 해 주세요.');
         }
-      }, 500);
+      }, 300);
     }
   }
   </script>
