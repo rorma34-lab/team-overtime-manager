@@ -73,7 +73,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 def validate_emp_id(emp_id: str):
-    """사원번호 유효성 검증:
+    r"""사원번호 유효성 검증:
     - 슈퍼관리자(ps37082) 제외
     - 무조건 숫자 6자리여야 하고 첫 자리가 1 또는 2로 시작 (^[12]\d{5}$)
     - 안내 문구 미노출 보안 원칙: 실패 시 '입력이 올바르지 않습니다.'만 표시
@@ -124,9 +124,15 @@ app.add_middleware(NoCacheMiddleware)
 def startup_event():
     init_db()
     sync_static_files()
-    # PPT 매뉴얼이 없으면 생성
-    if not PPTX_PATH.exists():
-        create_manual()
+    # PPT 매뉴얼 생성 (비동기 백그라운드 스레드로 실행하여 서버 구동 지연 0초)
+    import threading
+    def _bg_create_manual():
+        try:
+            if not PPTX_PATH.exists():
+                create_manual()
+        except Exception as _e:
+            print(f"[Manual Gen Background Notice] {_e}")
+    threading.Thread(target=_bg_create_manual, daemon=True).start()
 
 def get_local_ips():
     """서버의 로컬 네트워크 IP 목록 검색"""
