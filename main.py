@@ -123,6 +123,7 @@ app.add_middleware(NoCacheMiddleware)
 @app.on_event("startup")
 def startup_event():
     init_db()
+    sync_static_files()
     # PPT 매뉴얼이 없으면 생성
     if not PPTX_PATH.exists():
         create_manual()
@@ -2813,29 +2814,31 @@ def download_manual(type: str = Query("user", description="user 또는 admin")):
 
 
 # ----------------- 정적 파일 호스팅 (루트/하위 폴더 자동 호환) -----------------
-(BASE_DIR / "css").mkdir(exist_ok=True)
-(BASE_DIR / "js").mkdir(exist_ok=True)
-(BASE_DIR / "downloads").mkdir(exist_ok=True)
+def sync_static_files():
+    try:
+        (BASE_DIR / "css").mkdir(exist_ok=True)
+        (BASE_DIR / "js").mkdir(exist_ok=True)
+        (BASE_DIR / "downloads").mkdir(exist_ok=True)
 
-# 항상 최신 루트 소스로 하위/미러 폴더 자동 강제 동기화
-try:
-    if (BASE_DIR / "style.css").exists():
-        shutil.copy(str(BASE_DIR / "style.css"), str(BASE_DIR / "css" / "style.css"))
-        if (BASE_DIR / "static").exists():
-            shutil.copy(str(BASE_DIR / "style.css"), str(BASE_DIR / "static" / "style.css"))
+        if (BASE_DIR / "style.css").exists():
+            shutil.copy(str(BASE_DIR / "style.css"), str(BASE_DIR / "css" / "style.css"))
+            if STATIC_DIR.exists():
+                shutil.copy(str(BASE_DIR / "style.css"), str(STATIC_DIR / "style.css"))
 
-    if (BASE_DIR / "app.js").exists():
-        shutil.copy(str(BASE_DIR / "app.js"), str(BASE_DIR / "js" / "app.js"))
-        if (BASE_DIR / "static" / "js").exists():
-            shutil.copy(str(BASE_DIR / "app.js"), str(BASE_DIR / "static" / "js" / "app.js"))
-        if (BASE_DIR / "static").exists():
-            shutil.copy(str(BASE_DIR / "app.js"), str(BASE_DIR / "static" / "app.js"))
+        if (BASE_DIR / "app.js").exists():
+            shutil.copy(str(BASE_DIR / "app.js"), str(BASE_DIR / "js" / "app.js"))
+            if STATIC_DIR.exists():
+                (STATIC_DIR / "js").mkdir(parents=True, exist_ok=True)
+                shutil.copy(str(BASE_DIR / "app.js"), str(STATIC_DIR / "js" / "app.js"))
+                shutil.copy(str(BASE_DIR / "app.js"), str(STATIC_DIR / "app.js"))
 
-    if (BASE_DIR / "index.html").exists():
-        if (BASE_DIR / "static").exists():
-            shutil.copy(str(BASE_DIR / "index.html"), str(BASE_DIR / "static" / "index.html"))
-except Exception as sync_e:
-    print(f"[File Sync Notice] {sync_e}")
+        if (BASE_DIR / "index.html").exists():
+            if STATIC_DIR.exists():
+                shutil.copy(str(BASE_DIR / "index.html"), str(STATIC_DIR / "index.html"))
+    except Exception as sync_e:
+        print(f"[File Sync Notice] {sync_e}")
+
+sync_static_files()
 
 @app.get("/")
 def serve_index():
@@ -2848,12 +2851,18 @@ def serve_favicon():
 @app.get("/style.css")
 @app.get("/css/style.css")
 def serve_css():
-    return FileResponse(str(BASE_DIR / "style.css"), media_type="text/css", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+    target = BASE_DIR / "style.css"
+    if not target.exists():
+        target = BASE_DIR / "css" / "style.css"
+    return FileResponse(str(target), media_type="text/css", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 @app.get("/app.js")
 @app.get("/js/app.js")
 def serve_js():
-    return FileResponse(str(BASE_DIR / "app.js"), media_type="application/javascript", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+    target = BASE_DIR / "app.js"
+    if not target.exists():
+        target = BASE_DIR / "js" / "app.js"
+    return FileResponse(str(target), media_type="application/javascript", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 app.mount("/css", StaticFiles(directory=str(BASE_DIR / "css")), name="css")
 app.mount("/js", StaticFiles(directory=str(BASE_DIR / "js")), name="js")
