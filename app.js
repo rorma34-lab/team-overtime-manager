@@ -222,26 +222,8 @@ async function handleDeleteTeam(teamName) {
       return;
     }
     showToast(data.message);
-    await 
-  const otSelect = document.getElementById('otPageSizeSelect');
-  if (otSelect) {
-    otSelect.addEventListener('change', (e) => {
-      otPageSize = parseInt(e.target.value, 10) || 20;
-      otCurrentPage = 1;
-      renderAdminOvertimeTable();
-    });
-  }
-
-  const userSelect = document.getElementById('userPageSizeSelect');
-  if (userSelect) {
-    userSelect.addEventListener('change', (e) => {
-      userPageSize = parseInt(e.target.value, 10) || 20;
-      userCurrentPage = 1;
-      renderAdminUserRows();
-    });
-  }
-
-loadTeams();
+    await loadTeams();
+    renderTeamManageList();
     renderTeamManageList();
     if (currentMode === 'admin') {
       await loadAdminUserTable();
@@ -402,26 +384,7 @@ async function handleLogin(empId) {
       regEmpId.value = empId;
       regEmpId.setAttribute('readonly', 'true');
       document.getElementById('regName').value = '';
-      await 
-  const otSelect = document.getElementById('otPageSizeSelect');
-  if (otSelect) {
-    otSelect.addEventListener('change', (e) => {
-      otPageSize = parseInt(e.target.value, 10) || 20;
-      otCurrentPage = 1;
-      renderAdminOvertimeTable();
-    });
-  }
-
-  const userSelect = document.getElementById('userPageSizeSelect');
-  if (userSelect) {
-    userSelect.addEventListener('change', (e) => {
-      userPageSize = parseInt(e.target.value, 10) || 20;
-      userCurrentPage = 1;
-      renderAdminUserRows();
-    });
-  }
-
-loadTeams();
+      await loadTeams();
       document.getElementById('regTeam').value = '';
       document.getElementById('regPosition').value = '팀원';
       openModal('registerModal');
@@ -471,26 +434,7 @@ registerForm.addEventListener('submit', async (e) => {
     if (isAddingMemberFromAdmin) {
       showToast(`팀원 '${data.user.name}(${data.user.emp_id})' 등록이 완료되었습니다.`);
       await loadAdminUserTable();
-      await 
-  const otSelect = document.getElementById('otPageSizeSelect');
-  if (otSelect) {
-    otSelect.addEventListener('change', (e) => {
-      otPageSize = parseInt(e.target.value, 10) || 20;
-      otCurrentPage = 1;
-      renderAdminOvertimeTable();
-    });
-  }
-
-  const userSelect = document.getElementById('userPageSizeSelect');
-  if (userSelect) {
-    userSelect.addEventListener('change', (e) => {
-      userPageSize = parseInt(e.target.value, 10) || 20;
-      userCurrentPage = 1;
-      renderAdminUserRows();
-    });
-  }
-
-loadTeams();
+      await loadTeams();
     } else {
       setUserSession(data.user);
       showToast(`팀원 등록이 완료되었습니다. 환영합니다, ${data.user.name}님!`);
@@ -554,26 +498,7 @@ function setUserSession(user) {
     adminSubTabAccessLogs.style.display = isSuper ? 'inline-block' : 'none';
   }
 
-  
-  const otSelect = document.getElementById('otPageSizeSelect');
-  if (otSelect) {
-    otSelect.addEventListener('change', (e) => {
-      otPageSize = parseInt(e.target.value, 10) || 20;
-      otCurrentPage = 1;
-      renderAdminOvertimeTable();
-    });
-  }
-
-  const userSelect = document.getElementById('userPageSizeSelect');
-  if (userSelect) {
-    userSelect.addEventListener('change', (e) => {
-      userPageSize = parseInt(e.target.value, 10) || 20;
-      userCurrentPage = 1;
-      renderAdminUserRows();
-    });
-  }
-
-loadTeams();
+  loadTeams();
 
   // 로그인 성공 시 상단 헤더 액션 버튼 표시 (로그인 전 화면에서는 숨김)
   const headerNavActions = document.getElementById('headerNavActions');
@@ -5945,6 +5870,33 @@ window.deselectAllTeamFilters = function() {
   loadAdminUserTable();
   if (typeof loadSettlementSummary === 'function') loadSettlementSummary();
 };
+
+// ===== v1.49 페이징 컨트롤 초기화 =====
+function initPaginationControls() {
+  const otSelect = document.getElementById('otPageSizeSelect');
+  if (otSelect) {
+    otSelect.addEventListener('change', (e) => {
+      otPageSize = parseInt(e.target.value, 10) || 20;
+      otCurrentPage = 1;
+      if (typeof renderAdminOvertimeTable === 'function') renderAdminOvertimeTable();
+    });
+  }
+
+  const userSelect = document.getElementById('userPageSizeSelect');
+  if (userSelect) {
+    userSelect.addEventListener('change', (e) => {
+      userPageSize = parseInt(e.target.value, 10) || 20;
+      userCurrentPage = 1;
+      if (typeof renderAdminUserRows === 'function') renderAdminUserRows();
+    });
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initPaginationControls);
+} else {
+  initPaginationControls();
+}
 
 // ===== 전역 창 핸들러 바인딩 (HTML doLogin 및 인라인 이벤트 호환성 보장) =====
 window.handleLogin = handleLogin;
