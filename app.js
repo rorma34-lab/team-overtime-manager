@@ -531,7 +531,7 @@ function setUserSession(user) {
   loadUserOvertimes();
 }
 
-var _el_logoutBtn = document.getElementById('logoutBtn'); if (_el_logoutBtn) _el_logoutBtn.addEventListener('click', async () => {
+async function logout() {
   // 로그아웃 감사 로그 기록
   if (currentUser && currentUser.emp_id) {
     try {
@@ -556,17 +556,28 @@ var _el_logoutBtn = document.getElementById('logoutBtn'); if (_el_logoutBtn) _el
     headerNavActions.style.display = 'none';
   }
 
-  document.getElementById('mainDashboard').style.display = 'none';
-  document.getElementById('loginScreen').style.display = 'flex';
-  document.getElementById('logoutBtn').style.display = 'none';
-  document.getElementById('empIdInput').value = '';
+  const mainDashboard = document.getElementById('mainDashboard');
+  if (mainDashboard) mainDashboard.style.display = 'none';
+  const loginScreen = document.getElementById('loginScreen');
+  if (loginScreen) loginScreen.style.display = 'flex';
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) logoutBtn.style.display = 'none';
+  const empIdInput = document.getElementById('empIdInput');
+  if (empIdInput) empIdInput.value = '';
+
   const topManualBtn = document.getElementById('topManualBtn');
   if (topManualBtn) {
     topManualBtn.href = '/api/manual/user';
     topManualBtn.textContent = '📖 사용자 매뉴얼';
     topManualBtn.title = '사용자 매뉴얼 다운로드 (.pptx)';
   }
-});
+}
+window.logout = logout;
+
+var _el_logoutBtn = document.getElementById('logoutBtn');
+if (_el_logoutBtn) {
+  _el_logoutBtn.addEventListener('click', logout);
+}
 
 var _el_brandHomeBtn = document.getElementById('brandHomeBtn'); if (_el_brandHomeBtn) _el_brandHomeBtn.addEventListener('click', () => {
   if (currentUser) switchMode('user');
@@ -5760,12 +5771,12 @@ if (document.readyState === 'loading') {
 }
 
 // ===== 전역 창 핸들러 바인딩 (HTML doLogin 및 인라인 이벤트 호환성 보장) =====
-window.handleLogin = handleLogin;
-window.setUserSession = setUserSession;
-window.logout = logout;
-window.triggerOvertimeExcelImport = triggerOvertimeExcelImport;
-window.triggerUserExcelImport = triggerUserExcelImport;
-window.handleOvertimeExcelFileSelected = handleOvertimeExcelFileSelected;
-window.handleUserExcelFileSelected = handleUserExcelFileSelected;
-window.selectAllTeamFilters = selectAllTeamFilters;
-window.deselectAllTeamFilters = deselectAllTeamFilters;
+if (typeof handleLogin === 'function') window.handleLogin = handleLogin;
+if (typeof setUserSession === 'function') window.setUserSession = setUserSession;
+if (typeof logout === 'function') window.logout = logout;
+if (typeof triggerOvertimeExcelImport === 'function') window.triggerOvertimeExcelImport = triggerOvertimeExcelImport;
+if (typeof triggerUserExcelImport === 'function') window.triggerUserExcelImport = triggerUserExcelImport;
+if (typeof handleOvertimeExcelFileSelected === 'function') window.handleOvertimeExcelFileSelected = handleOvertimeExcelFileSelected;
+if (typeof handleUserExcelFileSelected === 'function') window.handleUserExcelFileSelected = handleUserExcelFileSelected;
+if (typeof selectAllTeamFilters === 'function') window.selectAllTeamFilters = selectAllTeamFilters;
+if (typeof deselectAllTeamFilters === 'function') window.deselectAllTeamFilters = deselectAllTeamFilters;
