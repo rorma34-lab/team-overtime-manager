@@ -18,7 +18,8 @@ import qrcode
 from database import (
     init_db, get_db_connection, log_audit, create_backup, DB_PATH,
     get_all_teams, create_team, delete_team, log_access_event,
-    is_using_turso, get_db_mode
+    is_using_turso, get_db_mode, get_cached_user_role,
+    invalidate_user_role_cache, invalidate_teams_cache
 )
 from schemas import (
     UserLoginRequest, UserRegisterRequest, UserUpdateRequest,

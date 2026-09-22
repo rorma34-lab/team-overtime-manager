@@ -2084,7 +2084,13 @@ function renderSuperAdminTeamCards(list) {
       } else {
         selectedDeptFilter = tName;
       }
+      const filterTeamEl = document.getElementById('filterTeam');
+      if (filterTeamEl) filterTeamEl.value = selectedDeptFilter;
+      const summaryTeamEl = document.getElementById('summaryTeamFilter');
+      if (summaryTeamEl) summaryTeamEl.value = selectedDeptFilter;
+
       loadAdminData();
+      loadAdminUserTable();
     });
 
     grid.appendChild(card);
@@ -2150,7 +2156,11 @@ function renderDeptFilterPills() {
     p.addEventListener('click', () => {
       selectedDeptFilter = isAct ? '' : t;
       sel.value = selectedDeptFilter;
+      const summaryTeamEl = document.getElementById('summaryTeamFilter');
+      if (summaryTeamEl) summaryTeamEl.value = selectedDeptFilter;
+
       loadAdminData();
+      loadAdminUserTable();
     });
     container.appendChild(p);
   });
@@ -2962,8 +2972,15 @@ window.handleReviewOvertime = handleReviewOvertime;
 window.openAdminEditModal = openAdminEditModal;
 
 // 필터 바 이벤트
-['filterStartDate', 'filterEndDate', 'filterTeam', 'filterCategory', 'filterStatus'].forEach(id => {
+['filterStartDate', 'filterEndDate', 'filterCategory', 'filterStatus'].forEach(id => {
   document.getElementById(id).addEventListener('change', loadAdminData);
+});
+document.getElementById('filterTeam').addEventListener('change', (e) => {
+  selectedDeptFilter = e.target.value;
+  const summaryTeamEl = document.getElementById('summaryTeamFilter');
+  if (summaryTeamEl) summaryTeamEl.value = selectedDeptFilter;
+  loadAdminData();
+  loadAdminUserTable();
 });
 document.getElementById('filterSearch').addEventListener('input', debounce(loadAdminData, 300));
 
@@ -2975,7 +2992,10 @@ document.getElementById('filterResetBtn').addEventListener('click', () => {
   document.getElementById('filterStatus').value = '';
   document.getElementById('filterSearch').value = '';
   selectedDeptFilter = '';
+  const summaryTeamEl = document.getElementById('summaryTeamFilter');
+  if (summaryTeamEl) summaryTeamEl.value = '';
   loadAdminData();
+  loadAdminUserTable();
 });
 
 function debounce(func, wait) {
@@ -3525,7 +3545,17 @@ function renderAdminUserRows() {
   const tbody = document.getElementById('adminUserTbody');
   tbody.innerHTML = '';
 
+  const activeDept = selectedDeptFilter || document.getElementById('filterTeam')?.value || document.getElementById('summaryTeamFilter')?.value || '';
   let list = [...allUsersCache];
+
+  if (activeDept) {
+    list = list.filter(u => u.team === activeDept);
+  }
+
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding: 1.5rem;">${activeDept ? `[${escapeHtml(activeDept)}] 부서에 등록된 팀원이 없습니다.` : '등록된 팀원이 없습니다.'}</td></tr>`;
+    return;
+  }
 
   // 팀원 소팅
   list.sort((a, b) => {
