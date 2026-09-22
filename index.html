@@ -15,19 +15,20 @@
       alert('사원번호를 입력해 주세요.');
       return;
     }
-    var fn = window.handleLogin || (typeof handleLogin === 'function' ? handleLogin : null);
-    if (fn) {
-      fn(v);
-    } else {
-      setTimeout(function() {
-        var fn2 = window.handleLogin || (typeof handleLogin === 'function' ? handleLogin : null);
-        if (fn2) {
-          fn2(v);
-        } else {
-          alert('🚨 [시스템 로딩 중 안내]\n\n브라우저에 이전 캐시 데이터가 남아 있거나 스크립트 로드 중입니다.\n\n[해결 방법]\n키보드의 [F5] 또는 [Ctrl + F5]를 눌러 브라우저를 새로고침 해 주세요.');
-        }
-      }, 300);
+
+    var attempts = 0;
+    function tryExecLogin() {
+      var fn = window.handleLogin || (typeof handleLogin === 'function' ? handleLogin : null);
+      if (fn) {
+        fn(v);
+      } else if (attempts < 20) {
+        attempts++;
+        setTimeout(tryExecLogin, 250);
+      } else {
+        alert('🚨 [시스템 접속 안내]\n\n최신 v1.49 소스코드가 서버에 업데이트(Git Push) 중이거나 브라우저 캐시를 읽고 있습니다.\n\n[해결 방법]\n1. 깃허브(GitHub)에 최신 파일 커밋 & 푸시를 진행해 주세요.\n2. 키보드의 [Ctrl + F5]를 눌러 캐시를 새로고침 해 주세요.');
+      }
     }
+    tryExecLogin();
   }
   </script>
 </head>
