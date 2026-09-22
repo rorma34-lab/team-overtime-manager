@@ -56,7 +56,7 @@ if not EXTERNAL_URL_FILE.exists():
     except Exception:
         pass
 
-app = FastAPI(title="Team Overtime Manager", version="v1.52")
+app = FastAPI(title="Team Overtime Manager", version="v1.54")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -629,7 +629,7 @@ def get_user_overtime_stats(emp_id: str):
     # 사전차감 잔여수 = 총사전차감 - 출장기간내사전차감
     def finalize_bucket(b):
         b["사전차감잔여"] = max(0, b["사전차감"] - b["출장내사전차감"])
-        b["최종실특근"] = max(0.0, round(float(b["일반휴일"] - b["사전차감"] - (b["대체휴무"] - b["출장내사전차감"])), 1))
+        b["최종실특근"] = round(float(b["일반휴일"] - b["사전차감"] - (b["대체휴무"] - b["출장내사전차감"])), 1)  # v1.54: 음수 보존
 
     for b in month_buckets.values(): finalize_bucket(b)
     for b in quarter_buckets.values(): finalize_bucket(b)
@@ -779,9 +779,9 @@ def get_my_overtime_stats(emp_id: str, year: Optional[int] = None):
             else:
                 monthly["pending_count"] += 1
 
-    # 최종 실특근 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무시 작성한 출장기간 이내의 사전차감)
+    # 최종 실특근 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무시 작성한 출장기간 이내의 사전차감) (v1.54: 음수 보존)
     def calc_act(norm, pre, trip_pre, sub):
-        return max(0.0, round(float(norm - pre - (sub - trip_pre)), 1))
+        return round(float(norm - pre - (sub - trip_pre)), 1)
 
     yearly["total_days"] = round(yearly["total_days"], 1)
     yearly["actual_overtime_days"] = calc_act(yearly["normal_days"], yearly["pre_deduct_count"], yearly["trip_pre_deduct_count"], yearly["sub_rest_days"])
@@ -1012,18 +1012,32 @@ def create_overtime(req: OvertimeCreateRequest):
     trip_start_val = (req.trip_start_date or "").strip()
     trip_end_val = (req.trip_end_date or "").strip()
 
+    cat_val = req.category.strip()
+    is_sub_leave = 1 if cat_val in ["대체휴무", "대체휴일"] else 0
+    is_conf_val = 1 if is_sub_leave else 0
+    is_fin_val = 1 if is_sub_leave else 0
+    is_rev_val = 1 if is_sub_leave else 0
+    conf_by_val = "대체휴무(자동)" if is_sub_leave else None
+    conf_at_val = now_str if is_sub_leave else None
+    fin_by_val = "대체휴무(자동)" if is_sub_leave else None
+    fin_at_val = now_str if is_sub_leave else None
+    rev_by_val = "대체휴무(자동)" if is_sub_leave else None
+    rev_at_val = now_str if is_sub_leave else None
+
     cursor.execute("""
     INSERT INTO overtimes (
         emp_id, user_name, team, category, start_date, end_date,
         project_no, location, reason, sub_holiday_used, sub_holiday_date, is_confirmed,
+        confirmed_by, confirmed_at, is_finalized, finalized_by, finalized_at,
+        is_reviewed, reviewed_by, reviewed_at,
         is_pre_deduct, trip_start_date, trip_end_date,
         created_at, updated_at, bonus_granted
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         req.emp_id.strip(),
         user_name,
         team,
-        req.category.strip(),
+        cat_val,
         req.start_date.strip(),
         req.end_date.strip(),
         (req.project_no or "").strip(),
@@ -1031,6 +1045,15 @@ def create_overtime(req: OvertimeCreateRequest):
         (req.reason or "").strip(),
         float(req.sub_holiday_used or 0),
         (req.sub_holiday_date or "").strip(),
+        is_conf_val,
+        conf_by_val,
+        conf_at_val,
+        is_fin_val,
+        fin_by_val,
+        fin_at_val,
+        is_rev_val,
+        rev_by_val,
+        rev_at_val,
         is_pre_deduct_val,
         trip_start_val,
         trip_end_val,
@@ -1280,6 +1303,10 @@ def update_overtime(item_id: int, req: OvertimeUpdateRequest):
                 extra_status_params.extend([f"{changed_name}({req.changed_by.strip()})", now_str])
             elif int(req.is_reviewed) == 0:
                 extra_status_clauses += ", reviewed_by = NULL, reviewed_at = NULL"
+
+    if req.category.strip() in ["대체휴무", "대체휴일"]:
+        extra_status_clauses += ", is_confirmed = 1, confirmed_by = '대체휴무(자동)', confirmed_at = ?, is_finalized = 1, finalized_by = '대체휴무(자동)', finalized_at = ?, is_reviewed = 1, reviewed_by = '대체휴무(자동)', reviewed_at = ?"
+        extra_status_params.extend([now_str, now_str, now_str])
 
     cursor.execute(f"""
     UPDATE overtimes SET

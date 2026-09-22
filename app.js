@@ -59,6 +59,45 @@ let otCurrentPage = 1;
 let userPageSize = 20;
 let userCurrentPage = 1;
 
+// ===== 대한민국 법정공휴일 및 주말 판별 헬퍼 (v1.54) =====
+const KOREAN_HOLIDAYS = new Set([
+  '01-01', '03-01', '05-05', '06-06', '08-15', '10-03', '10-09', '12-25',
+  '2024-02-09', '2024-02-10', '2024-02-11', '2024-02-12', '2024-05-06', '2024-05-15', '2024-09-16', '2024-09-17', '2024-09-18',
+  '2025-01-28', '2025-01-29', '2025-01-30', '2025-03-03', '2025-05-06', '2025-10-05', '2025-10-06', '2025-10-07', '2025-10-08',
+  '2026-02-16', '2026-02-17', '2026-02-18', '2026-05-24', '2026-09-24', '2026-09-25', '2026-09-26',
+  '2027-02-06', '2027-02-07', '2027-02-08', '2027-05-13', '2027-09-14', '2027-09-15', '2027-09-16'
+]);
+
+function isWeekendOrHoliday(dateStr) {
+  if (!dateStr || dateStr.length < 10) return false;
+  const mmdd = dateStr.slice(5, 10);
+  if (KOREAN_HOLIDAYS.has(dateStr) || KOREAN_HOLIDAYS.has(mmdd)) return true;
+  const parts = dateStr.split('-');
+  const dt = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  const day = dt.getDay();
+  return (day === 0 || day === 6);
+}
+
+function getValidSubHolidayDays(sStr, eStr) {
+  if (!sStr) return 0;
+  const sParts = sStr.split('-');
+  const eParts = (eStr || sStr).split('-');
+  let cur = new Date(parseInt(sParts[0], 10), parseInt(sParts[1], 10) - 1, parseInt(sParts[2], 10));
+  const end = new Date(parseInt(eParts[0], 10), parseInt(eParts[1], 10) - 1, parseInt(eParts[2], 10));
+  let validDays = 0;
+  while (cur <= end) {
+    const yyyy = cur.getFullYear();
+    const mm = String(cur.getMonth() + 1).padStart(2, '0');
+    const dd = String(cur.getDate()).padStart(2, '0');
+    const dStr = `${yyyy}-${mm}-${dd}`;
+    if (!isWeekendOrHoliday(dStr)) {
+      validDays += 1;
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return validDays;
+}
+
 function renderPaginationNav(containerId, currentPage, totalPages, onPageChange) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -1270,7 +1309,7 @@ function renderUserMyStats(list) {
     }
 
     const otDays = (item.category === '일반휴일') ? days : 0;
-    const subDays = (item.category === '대체휴무' || item.category === '대체휴일') ? days : subUsed;
+    const subDays = (item.category === '대체휴무' || item.category === '대체휴일') ? getValidSubHolidayDays(sStr, eStr) : subUsed;
     const preCount = isPre ? days : 0;
     const tripPreCount = inTrip ? days : 0;
 
@@ -1312,8 +1351,8 @@ function renderUserMyStats(list) {
     }
   });
 
-  // 최종 실특근 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무시 작성한 출장기간 이내의 사전차감)
-  const calcAct = (norm, pre, sub, tripPre) => Math.max(0, Math.round((norm - pre - (sub - tripPre)) * 10) / 10);
+  // 최종 실특근 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무시 작성한 출장기간 이내의 사전차감) (마이너스 음수값 보존)
+  const calcAct = (norm, pre, sub, tripPre) => Math.round((norm - pre - (sub - tripPre)) * 10) / 10;
   const monthActDays = calcAct(monthNorm, monthPre, monthSub, monthTripPre);
   const halfActDays = calcAct(halfNorm, halfPre, halfSub, halfTripPre);
   const yearActDays = calcAct(yearNorm, yearPre, yearSub, yearTripPre);
@@ -1421,6 +1460,11 @@ function renderUserCalendar(year, month) {
     });
 
     dayOvertimes.forEach(ot => {
+      // 주말 및 법정공휴일은 대체휴무 표시 제외
+      if ((ot.category === '대체휴무' || ot.category === '대체휴일') && isWeekendOrHoliday(dateStr)) {
+        return;
+      }
+
       const badge = document.createElement('div');
       const isConf = ot.is_confirmed === 1;
       let badgeClass = isConf ? 'confirmed' : 'pending';
@@ -2255,28 +2299,72 @@ const adminCalNextBtn = document.getElementById('adminCalNextBtn');
 const adminCalMonthTitle = document.getElementById('adminCalMonthTitle');
 const adminCalGrid = document.getElementById('adminCalGrid');
 
-adminCalPrevBtn.addEventListener('click', () => {
-  adminCalMonth--;
-  if (adminCalMonth < 0) { adminCalMonth = 11; adminCalYear--; }
-  renderAdminCalendar();
-});
+if (adminCalPrevBtn) {
+  adminCalPrevBtn.addEventListener('click', () => {
+    adminCalMonth--;
+    if (adminCalMonth < 0) { adminCalMonth = 11; adminCalYear--; }
+    renderAdminCalendar();
+  });
+}
 
-adminCalNextBtn.addEventListener('click', () => {
-  adminCalMonth++;
-  if (adminCalMonth > 11) { adminCalMonth = 0; adminCalYear++; }
-  renderAdminCalendar();
-});
+if (adminCalNextBtn) {
+  adminCalNextBtn.addEventListener('click', () => {
+    adminCalMonth++;
+    if (adminCalMonth > 11) { adminCalMonth = 0; adminCalYear++; }
+    renderAdminCalendar();
+  });
+}
+
+const adminCalUserFilterEl = document.getElementById('adminCalUserFilter');
+if (adminCalUserFilterEl) {
+  adminCalUserFilterEl.addEventListener('change', () => {
+    renderAdminCalendar();
+  });
+}
+
+function populateAdminCalUserFilter() {
+  const sel = document.getElementById('adminCalUserFilter');
+  if (!sel) return;
+  const currentVal = sel.value;
+  sel.innerHTML = '<option value="">👤 전체 사원 (모든 인원)</option>';
+
+  const userMap = new Map();
+  (lastFetchedOvertimes || []).forEach(item => {
+    if (item.emp_id && item.user_name) {
+      userMap.set(item.emp_id, { emp_id: item.emp_id, user_name: item.user_name, team: item.team || '' });
+    }
+  });
+
+  const sortedUsers = Array.from(userMap.values()).sort((a, b) => a.user_name.localeCompare(b.user_name, 'ko'));
+  sortedUsers.forEach(u => {
+    const opt = document.createElement('option');
+    opt.value = u.emp_id;
+    opt.textContent = `${u.user_name} (${u.emp_id}${u.team ? ' · ' + u.team : ''})`;
+    sel.appendChild(opt);
+  });
+
+  if (currentVal && Array.from(sel.options).some(o => o.value === currentVal)) {
+    sel.value = currentVal;
+  }
+}
 
 function renderAdminCalendar() {
   adminCalMonthTitle.textContent = `${adminCalYear}년 ${adminCalMonth + 1}월`;
   adminCalGrid.innerHTML = '';
 
+  populateAdminCalUserFilter();
+
+  const selectedUserEmpId = document.getElementById('adminCalUserFilter')?.value || '';
+  let baseList = lastFetchedOvertimes || [];
+  if (selectedUserEmpId) {
+    baseList = baseList.filter(o => o.emp_id === selectedUserEmpId);
+  }
+
   const firstDayIndex = new Date(adminCalYear, adminCalMonth, 1).getDay();
   const lastDate = new Date(adminCalYear, adminCalMonth + 1, 0).getDate();
   const prevLastDate = new Date(adminCalYear, adminCalMonth, 0).getDate();
-  const todayStr = getTodayStr();
 
-  // 이전 달 날짜들
+  // 지난 달 날짜 채우기
   for (let x = firstDayIndex; x > 0; x--) {
     const cell = document.createElement('div');
     cell.className = 'admin-cal-cell disabled';
@@ -2289,6 +2377,7 @@ function renderAdminCalendar() {
     const dateStr = `${adminCalYear}-${String(adminCalMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     const dateObj = new Date(adminCalYear, adminCalMonth, d);
     const dayOfWeek = dateObj.getDay();
+    const isWeekendHol = isWeekendOrHoliday(dateStr);
 
     const cell = document.createElement('div');
     cell.className = 'admin-cal-cell';
@@ -2298,17 +2387,18 @@ function renderAdminCalendar() {
     if (dayOfWeek === 0) dateNumClass = 'sun';
     if (dayOfWeek === 6) dateNumClass = 'sat';
 
-    // 해당 날짜에 해당하는 특근 목록 조회
-    const dayOvertimes = lastFetchedOvertimes.filter(o => o.start_date <= dateStr && o.end_date >= dateStr);
-    const daySubHolidays = lastFetchedOvertimes.filter(o => o.sub_holiday_date === dateStr && (parseFloat(o.sub_holiday_used) || 0) > 0);
-    const workerCount = dayOvertimes.length;
-    const subHolidayCount = daySubHolidays.length;
-    const bonusCount = dayOvertimes.filter(o => o.bonus_granted === 1).length;
+    // 해당 날짜에 해당하는 특근 목록 및 대체휴무 목록 (주말/공휴일 대체휴무 카운트 및 칩 제외)
+    const dayOvertimes = baseList.filter(o => o.start_date <= dateStr && o.end_date >= dateStr);
+    const daySubHolidays = isWeekendHol ? [] : baseList.filter(o => o.sub_holiday_date === dateStr && (parseFloat(o.sub_holiday_used) || 0) > 0);
 
-    // 요구사항 4: 축약(+N명) 없이 모든 특근 인원 전체 표시
+    const displayOvertimes = dayOvertimes.filter(o => !((o.category === '대체휴무' || o.category === '대체휴일') && isWeekendHol));
+    const workerCount = displayOvertimes.length;
+    const subHolidayCount = daySubHolidays.length;
+    const bonusCount = displayOvertimes.filter(o => o.bonus_granted === 1).length;
+
     let workerChipsHtml = '';
     if (workerCount > 0) {
-      dayOvertimes.forEach(o => {
+      displayOvertimes.forEach(o => {
         const hasBonus = o.bonus_granted === 1;
         const hasPre = o.is_pre_deduct === 1;
         const bonusStyle = hasBonus ? 'border: 1.5px solid #8b5cf6; box-shadow: 0 0 0 1px #a78bfa; font-weight: 700;' : '';
@@ -2319,7 +2409,6 @@ function renderAdminCalendar() {
         workerChipsHtml += `<div class="worker-chip ${o.category}${hasBonus ? ' has-bonus' : ''}" style="${bonusStyle}" title="${escapeHtml(o.user_name)} (${o.category})${bonusTitle}${preTitle}">${bonusPrefix}${prePrefix}${escapeHtml(o.user_name)}</div>`;
       });
     }
-    // 요구사항 3 & 4: 대체휴무(대휴) 사용 인원도 고유 클래스로 눈에 띄게 전체 표시
     if (subHolidayCount > 0) {
       daySubHolidays.forEach(s => {
         workerChipsHtml += `<div class="worker-chip 대체휴무" title="대체휴무 사용: ${escapeHtml(s.user_name)} (${s.sub_holiday_used}일)">🌿 ${escapeHtml(s.user_name)}</div>`;
@@ -2572,8 +2661,11 @@ function renderAdminOvertimeTable() {
     const isConf = item.is_confirmed === 1;
     const isFin = item.is_finalized === 1;
     const isRev = item.is_reviewed === 1;
+    const isSubLeave = (item.category === '대체휴무' || item.category === '대체휴일');
 
-    let stageBadge = `
+    let stageBadge = isSubLeave ? `
+      <span class="badge" style="background:#d1fae5; color:#065f46; font-size:0.75rem; padding:3px 8px; border-radius:6px; font-weight:700; display:inline-block;">🌿 대체휴무 (즉시 적용)</span>
+    ` : `
       <div style="display: flex; flex-direction: column; gap: 2px; align-items: center;">
         ${isConf ? `<span class="badge-stage badge-stage-2" title="${escapeHtml(item.confirmed_by || '')}" style="font-size:0.72rem; padding:1px 6px;">✅ 승인</span>` : `<span class="badge-stage badge-stage-1" style="font-size:0.72rem; padding:1px 6px;">⏳ 대기</span>`}
         ${isFin ? `<span class="badge-stage badge-stage-3" title="${escapeHtml(item.finalized_by || '')}" style="font-size:0.72rem; padding:1px 6px;">🎯 확정</span>` : `<span class="badge-stage" style="background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1; font-size:0.72rem; padding:1px 6px;">⚪ 미확정</span>`}
@@ -2581,7 +2673,9 @@ function renderAdminOvertimeTable() {
       </div>
     `;
 
-    let actionFeedbackHtml = `
+    let actionFeedbackHtml = isSubLeave ? `
+      <span style="color:#94a3b8; font-size:0.8rem;">-</span>
+    ` : `
       <div style="display: flex; flex-direction: column; gap: 3px; align-items: center;">
         <div style="display: flex; gap: 3px;">
           ${!isConf 
@@ -3494,12 +3588,12 @@ var _el_exportExcelBtn = document.getElementById('exportExcelBtn'); if (_el_expo
       const userList = Object.values(userMap).sort((a, b) => a.team.localeCompare(b.team) || a.name.localeCompare(b.name));
       const sheet2Rows = userList.map((u, idx) => {
         const totalSub = u.sub_holiday_used + u.sub_holiday_days;
-        // 최종 실특근 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무시 작성한 출장기간 이내의 사전차감)
-        const actualOvertime = Math.max(0, Math.round((u.normal_holiday_days - u.pre_deduct_count - (totalSub - u.trip_pre_deduct_count)) * 10) / 10);
+        // 최종 실특근 = 일반특근 - 사전차감 - (대체휴무 - 대체휴무시 작성한 출장기간 이내의 사전차감) (마이너스 음수 보존)
+        const actualOvertime = Math.round((u.normal_holiday_days - u.pre_deduct_count - (totalSub - u.trip_pre_deduct_count)) * 10) / 10;
         // 사전차감 잔여 = 총 사전차감 - 출장내 사전차감
         const preRemain = Math.max(0, u.pre_deduct_count - u.trip_pre_deduct_count);
-        // 최종 실특근일 + 보너스 합산
-        const actualOvertimeWithBonus = Math.max(0, Math.round((actualOvertime + (u.bonus_count || 0)) * 10) / 10);
+        // 최종 실특근일 + 보너스 합산 (마이너스 음수 보존)
+        const actualOvertimeWithBonus = Math.round((actualOvertime + (u.bonus_count || 0)) * 10) / 10;
         return {
           "순번": idx + 1,
           "사원번호": u.emp_id,
@@ -5035,7 +5129,7 @@ async function showUserStatsPopup(empId, name) {
       const subRest = b['대체휴무'] || 0;
       const totalPre = b['사전차감'] || 0;
       const tripPre = b['출장내사전차감'] || 0;
-      const actualOt = b['최종실특근'] !== undefined ? b['최종실특근'] : Math.max(0, Math.round((normalH - totalPre - (subRest - tripPre)) * 10) / 10);
+      const actualOt = b['최종실특근'] !== undefined ? b['최종실특근'] : Math.round((normalH - totalPre - (subRest - tripPre)) * 10) / 10;
       const remainPre = b['사전차감잔여'] !== undefined ? b['사전차감잔여'] : Math.max(0, totalPre - tripPre);
       const recCount = b['total_records'] || 0;
 

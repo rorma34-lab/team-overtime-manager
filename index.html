@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>팀원 특근 신청 및 관리 시스템</title>
   <meta name="description" content="팀원 특근 신청 및 조회, 승인, 엑셀 내보내기 및 모바일 원격 접속 시스템">
-  <link rel="stylesheet" href="/style.css?v=20260922_v152">
-  <link rel="stylesheet" href="/css/style.css?v=20260922_v152">
+  <link rel="stylesheet" href="/style.css?v=20260922_v153">
+  <link rel="stylesheet" href="/css/style.css?v=20260922_v153">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⏰</text></svg>">
   <script>
   function doLogin() {
@@ -47,7 +47,7 @@
         <div class="brand-logo">⏰</div>
         <div>
           <span class="brand-title">스마트 특근 관리</span>
-          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.52</span>
+          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.54</span>
           <span class="brand-subtitle">Smart Overtime System</span>
         </div>
       </div>
@@ -479,13 +479,18 @@
           <!-- 뷰 A: 관리자 월간 캘린더 뷰 (해당일 클릭 시 작업자 정보 표시) -->
           <div id="adminCalendarView">
             <div class="admin-calendar-wrapper">
-              <div class="calendar-header" style="margin-bottom: 0.75rem;">
-                <button type="button" class="cal-nav-btn" id="adminCalPrevBtn" title="이전달">◀</button>
-                <span class="calendar-month-title" id="adminCalMonthTitle">2026년 9월</span>
-                <button type="button" class="cal-nav-btn" id="adminCalNextBtn" title="다음달">▶</button>
-                <span style="font-size: 0.82rem; color: var(--text-muted); margin-left: auto;">
-                  💡 날짜 칸을 클릭하면 해당일 특근 작업자 상세 목록이 아래에 표시됩니다.
-                </span>
+              <div class="calendar-header" style="margin-bottom: 0.75rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <button type="button" class="cal-nav-btn" id="adminCalPrevBtn" title="이전달">◀</button>
+                  <span class="calendar-month-title" id="adminCalMonthTitle">2026년 9월</span>
+                  <button type="button" class="cal-nav-btn" id="adminCalNextBtn" title="다음달">▶</button>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                  <label for="adminCalUserFilter" style="font-size: 0.82rem; font-weight: 700; color: var(--text-main); margin: 0;">👤 사원 필터:</label>
+                  <select id="adminCalUserFilter" class="input-field" style="padding: 0.35rem 0.65rem; font-size: 0.82rem; width: auto; min-width: 170px;">
+                    <option value="">👤 전체 사원 (모든 인원)</option>
+                  </select>
+                </div>
               </div>
 
               <!-- 요일 헤더 -->
@@ -1233,11 +1238,28 @@
       </div>
       <div class="modal-body" style="max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1.25rem;">
         
-        <!-- v1.49 (Latest) -->
+        <!-- v1.53 (Latest) -->
         <div style="background: var(--bg-card); border: 2px solid #0d9488; padding: 1.1rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
           <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-            <span style="background: #0d9488; color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.49</span>
+            <span style="background: #0d9488; color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.53</span>
             <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-main);">최신 정식 릴리즈 (Latest)</span>
+            <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-22</span>
+          </div>
+          <div style="font-weight: 800; color: #0d9488; margin-bottom: 0.5rem; font-size: 0.88rem;">
+            🌿 v1.53 대체휴무(휴가) 작성 시 승인/확정/검토 4단계 절차 생략 &amp; PPT 매뉴얼 최신화
+          </div>
+          <ul style="margin-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.84rem; line-height: 1.6; color: var(--text-main);">
+            <li><b>대체휴무 4단계 절차 자동 생략</b>: 대체휴무(휴가 사용) 작성 시 승인/확정/검토 4단계 절차가 자동 생략되어 등록 즉시 [🌿 대체휴무] 단일 뱃지로 자동 반영</li>
+            <li><b>불필요 조작 버튼 숨김</b>: 관리자 테이블 및 캘린더에서 대체휴무 건의 승인/확정/검토 조작 버튼을 원천 제외하여 깔끔한 화면 구성</li>
+            <li><b>PPT 매뉴얼 3종 최신화 (v1.53)</b>: 사용자용, 관리자용, 통합 시스템 매뉴얼 내 대체휴무 자동 반영 가이드 및 시스템 릴리즈 내용 반영</li>
+          </ul>
+        </div>
+
+        <!-- v1.49 -->
+        <div style="background: var(--bg-subtle); border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-md);">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+            <span style="background: var(--text-muted); color: #fff; font-size: 0.8rem; font-weight: 700; padding: 2px 10px; border-radius: 9999px;">v1.49</span>
+            <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-main);">이전 릴리즈</span>
             <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-22</span>
           </div>
           <div style="font-weight: 800; color: #0d9488; margin-bottom: 0.5rem; font-size: 0.88rem;">
@@ -2071,7 +2093,7 @@
   <div class="toast-container" id="toastContainer"></div>
 
   <!-- 메인 애플리케이션 스크립트 -->
-  <script src="/app.js?v=20260922_v152"></script>
+  <script src="/app.js?v=20260922_v154"></script>
   <!-- 클라이언트 사이드 고속 엑셀 생성 라이브러리 (SheetJS - 비동기 로딩) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 </body>

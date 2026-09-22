@@ -1,8 +1,58 @@
+import os
+import shutil
+import json
 import io
 from datetime import datetime, timedelta
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+
+# ===== v1.54: 대한민국 법정공휴일 및 주말 판별 헬퍼 =====
+KOREAN_HOLIDAYS_FIXED = {'01-01', '03-01', '05-05', '06-06', '08-15', '10-03', '10-09', '12-25'}
+KOREAN_HOLIDAYS_LUNAR = {
+    '2024-02-09', '2024-02-10', '2024-02-11', '2024-02-12', '2024-05-06', '2024-05-15',
+    '2024-09-16', '2024-09-17', '2024-09-18',
+    '2025-01-28', '2025-01-29', '2025-01-30', '2025-03-03', '2025-05-06',
+    '2025-10-05', '2025-10-06', '2025-10-07', '2025-10-08',
+    '2026-02-16', '2026-02-17', '2026-02-18', '2026-05-24',
+    '2026-09-24', '2026-09-25', '2026-09-26',
+    '2027-02-06', '2027-02-07', '2027-02-08', '2027-05-13',
+    '2027-09-14', '2027-09-15', '2027-09-16',
+}
+
+def is_weekend_or_holiday(date_str: str) -> bool:
+    """토/일요일 또는 법정공휴일이면 True"""
+    if not date_str or len(date_str) < 10:
+        return False
+    mmdd = date_str[5:10]
+    if mmdd in KOREAN_HOLIDAYS_FIXED or date_str in KOREAN_HOLIDAYS_LUNAR:
+        return True
+    try:
+        from datetime import datetime as _dt
+        d = _dt.strptime(date_str[:10], "%Y-%m-%d")
+        return d.weekday() >= 5  # 5=Saturday, 6=Sunday
+    except Exception:
+        return False
+
+def count_valid_sub_holiday_days(start_date: str, end_date: str) -> float:
+    """대체휴무 기간 중 주말/공휴일 제외한 실제 유효 일수 반환"""
+    if not start_date:
+        return 0.0
+    try:
+        from datetime import datetime as _dt, timedelta
+        d1 = _dt.strptime(start_date[:10], "%Y-%m-%d")
+        d2 = _dt.strptime((end_date or start_date)[:10], "%Y-%m-%d")
+        if d2 < d1:
+            d2 = d1
+        count = 0
+        cur = d1
+        while cur <= d2:
+            if not is_weekend_or_holiday(cur.strftime("%Y-%m-%d")):
+                count += 1
+            cur += timedelta(days=1)
+        return float(count)
+    except Exception:
+        return 0.0
 
 # ===========================================================================
 #  공통 스타일 팩토리 (openpyxl 엔진 전용)
@@ -395,12 +445,12 @@ def aggregate_user_holidays(records: list, user_positions: dict = None) -> list:
                     u["trip_pre_deduct_count"] += 1
                     break
 
-    # 2차: 개인별 차감 분배 및 단계별 최종 실특근일+보너스 확정 계산
+    # 2차: 개인별 차감 분배 및 단계별 최종 실특근일+보너스 확정 계산 (v1.54: 음수 보존)
     for u in user_map.values():
         u["pre_deduct_remaining"] = max(0, u["pre_deduct_count"] - u["trip_pre_deduct_count"])
         net_deduct = float(u["pre_deduct_count"] + max(0.0, float(u["sub_holiday_days"] - u["trip_pre_deduct_count"])))
-        u["actual_overtime_days"] = max(0.0, round(float(u["normal_holiday_days"] - net_deduct), 1))
-        u["actual_overtime_with_bonus"] = max(0.0, round(float(u["actual_overtime_days"] + u["bonus_count"]), 1))
+        u["actual_overtime_days"] = round(float(u["normal_holiday_days"] - net_deduct), 1)  # v1.54: 음수 보존
+        u["actual_overtime_with_bonus"] = round(float(u["actual_overtime_days"] + u["bonus_count"]), 1)  # v1.54: 음수 보존
 
         # 차감의 단계별 배분 (우선순위: 검토완료 -> 확정 -> 승인 -> 신청 순)
         rem_ded = max(0.0, net_deduct)
@@ -422,16 +472,16 @@ def aggregate_user_holidays(records: list, user_positions: dict = None) -> list:
         rem_ded = max(0.0, rem_ded - d_apply)
 
         # 각 단계별 최종 실특근일+보너스 [일]
-        u["applied_final_with_bonus"] = max(0.0, round(apply_net + u["applied_bonus"], 1))
-        u["approved_final_with_bonus"] = max(0.0, round(appr_net + u["approved_bonus"], 1))
-        u["finalized_final_with_bonus"] = max(0.0, round(fin_net + u["finalized_bonus"], 1))
-        u["reviewed_final_with_bonus"] = max(0.0, round(rev_net + u["reviewed_bonus"], 1))
+        u["applied_final_with_bonus"] = round(apply_net + u["applied_bonus"], 1)
+        u["approved_final_with_bonus"] = round(appr_net + u["approved_bonus"], 1)
+        u["finalized_final_with_bonus"] = round(fin_net + u["finalized_bonus"], 1)
+        u["reviewed_final_with_bonus"] = round(rev_net + u["reviewed_bonus"], 1)
 
-        # 검증: 단계별 합산과 전체 합계 동기화
-        u["actual_overtime_with_bonus"] = max(0.0, round(
+        # 검증: 단계별 합산과 전체 합계 동기화 (v1.54: 음수 보존)
+        u["actual_overtime_with_bonus"] = round(
             u["applied_final_with_bonus"] + u["approved_final_with_bonus"] +
             u["finalized_final_with_bonus"] + u["reviewed_final_with_bonus"], 1
-        ))
+        )
 
     user_list = list(user_map.values())
     user_list.sort(key=lambda x: (x["team"], x["name"]))
@@ -472,18 +522,18 @@ def aggregate_team_holidays(user_summaries: list) -> list:
         tm["normal_holiday_days"] += u["normal_holiday_days"]
         tm["sub_holiday_days"] += u.get("sub_holiday_days", 0)
         tm["total_days"] += u["total_days"]
-        tm["actual_overtime_days"] = max(0.0, round(tm["actual_overtime_days"] + u["actual_overtime_days"], 1))
+        tm["actual_overtime_days"] = round(tm["actual_overtime_days"] + u["actual_overtime_days"], 1)  # v1.54: 음수 보존
         tm["bonus_count"] += u.get("bonus_count", 0)
         tm["records_count"] += u["records_count"]
         tm["applied_days"] += u.get("applied_days", 0)
         tm["approved_days"] += u.get("approved_days", 0)
         tm["finalized_days"] += u.get("finalized_days", 0)
         tm["reviewed_days"] += u.get("reviewed_days", 0)
-        tm["applied_final_with_bonus"] = max(0.0, round(tm["applied_final_with_bonus"] + u.get("applied_final_with_bonus", 0.0), 1))
-        tm["approved_final_with_bonus"] = max(0.0, round(tm["approved_final_with_bonus"] + u.get("approved_final_with_bonus", 0.0), 1))
-        tm["finalized_final_with_bonus"] = max(0.0, round(tm["finalized_final_with_bonus"] + u.get("finalized_final_with_bonus", 0.0), 1))
-        tm["reviewed_final_with_bonus"] = max(0.0, round(tm["reviewed_final_with_bonus"] + u.get("reviewed_final_with_bonus", 0.0), 1))
-        tm["actual_overtime_with_bonus"] = max(0.0, round(tm["actual_overtime_with_bonus"] + u.get("actual_overtime_with_bonus", 0.0), 1))
+        tm["applied_final_with_bonus"] = round(tm["applied_final_with_bonus"] + u.get("applied_final_with_bonus", 0.0), 1)
+        tm["approved_final_with_bonus"] = round(tm["approved_final_with_bonus"] + u.get("approved_final_with_bonus", 0.0), 1)
+        tm["finalized_final_with_bonus"] = round(tm["finalized_final_with_bonus"] + u.get("finalized_final_with_bonus", 0.0), 1)
+        tm["reviewed_final_with_bonus"] = round(tm["reviewed_final_with_bonus"] + u.get("reviewed_final_with_bonus", 0.0), 1)
+        tm["actual_overtime_with_bonus"] = round(tm["actual_overtime_with_bonus"] + u.get("actual_overtime_with_bonus", 0.0), 1)
 
     team_list = list(team_map.values())
     team_list.sort(key=lambda x: x["team"])
