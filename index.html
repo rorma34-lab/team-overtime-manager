@@ -37,7 +37,7 @@
         <div class="brand-logo">⏰</div>
         <div>
           <span class="brand-title">스마트 특근 관리</span>
-          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.48</span>
+          <span class="version-badge" id="versionBadgeBtn" role="button" tabindex="0" title="프로그램 버전 및 릴리즈 이력 보기">v1.49</span>
           <span class="brand-subtitle">Smart Overtime System</span>
         </div>
       </div>
@@ -381,11 +381,19 @@
 
         <!-- 요구사항 2: 슈퍼관리자 전용 팀별 구분 요약 카드 섹션 (팀관리자는 숨김) -->
         <div id="superAdminTeamSection" style="display: none; margin-bottom: 1.25rem;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
             <span style="font-size: 0.88rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 0.4rem;">
               🏢 부서/팀별 현황 구분 (원클릭 필터링 지원)
             </span>
-            <span style="font-size: 0.75rem; color: var(--text-muted);">팀 카드를 클릭하면 해당 팀의 내역만 빠르게 필터링됩니다.</span>
+            <div style="display: flex; align-items: center; gap: 0.4rem;">
+              <button type="button" class="btn btn-secondary btn-xs" id="selectAllTeamsBtn" onclick="selectAllTeamFilters()" style="font-size: 0.75rem; padding: 3px 8px; border-radius: 4px; background: var(--bg-subtle); border: 1px solid var(--border-color);">
+                ☑️ 전체 선택
+              </button>
+              <button type="button" class="btn btn-secondary btn-xs" id="deselectAllTeamsBtn" onclick="deselectAllTeamFilters()" style="font-size: 0.75rem; padding: 3px 8px; border-radius: 4px; background: var(--bg-subtle); border: 1px solid var(--border-color);">
+                🔳 전체 해제
+              </button>
+              <span style="font-size: 0.75rem; color: var(--text-muted); margin-left: 4px;">팀 카드를 클릭하면 선택/해제 토글됩니다.</span>
+            </div>
           </div>
           <div id="superAdminTeamGrid" class="stats-grid" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem;">
             <!-- JS로 팀별 카드 렌더링 -->
@@ -600,7 +608,23 @@
               </div>
             </div>
 
-            <!-- 관리자 전체 특근 데이터 테이블 (소팅 지원) -->
+            <!-- v1.49 페이징 및 표시 개수 선택 바 -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem; background: var(--bg-subtle); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+              <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--text-main);">
+                <span>📄 페이지당 표시 건수:</span>
+                <select id="otPageSizeSelect" style="padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--text-main); font-size: 0.85rem; font-weight: 600; cursor: pointer;">
+                  <option value="10">10개씩 보기</option>
+                  <option value="20" selected>20개씩 보기</option>
+                  <option value="50">50개씩 보기</option>
+                  <option value="100">100개씩 보기</option>
+                </select>
+              </div>
+              <div id="otPaginationInfo" style="font-size: 0.83rem; color: var(--text-muted); font-weight: 600;">
+                총 0건 중 0 ~ 0건 표시
+              </div>
+            </div>
+
+            <!-- 관리자 전체 특근 데이터 테이블 (소팅 및 페이징 지원) -->
             <div class="table-responsive">
               <table class="data-table">
                 <thead>
@@ -628,6 +652,9 @@
                 </tbody>
               </table>
             </div>
+
+            <!-- v1.49 페이징 네비게이션 바 -->
+            <div id="otPaginationNav" style="display: flex; justify-content: center; align-items: center; gap: 0.3rem; margin-top: 1rem; flex-wrap: wrap;"></div>
           </div>
 
         </div>
@@ -649,6 +676,22 @@
               '관리자 권한' 스위치를 켜면 해당 팀원도 관리자 모드로 입장하여 특근을 승인할 수 있습니다. 컬럼명을 클릭하면 가나다순/사번순 정렬됩니다.
             </p>
             
+            <!-- v1.49 페이징 및 표시 개수 선택 바 (팀원 명부) -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem; background: var(--bg-subtle); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+              <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--text-main);">
+                <span>📄 페이지당 표시 명수:</span>
+                <select id="userPageSizeSelect" style="padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--text-main); font-size: 0.85rem; font-weight: 600; cursor: pointer;">
+                  <option value="10">10명씩 보기</option>
+                  <option value="20" selected>20명씩 보기</option>
+                  <option value="50">50명씩 보기</option>
+                  <option value="100">100명씩 보기</option>
+                </select>
+              </div>
+              <div id="userPaginationInfo" style="font-size: 0.83rem; color: var(--text-muted); font-weight: 600;">
+                총 0명 중 0 ~ 0명 표시
+              </div>
+            </div>
+
             <div class="table-responsive">
               <table class="data-table">
                 <thead>
@@ -666,6 +709,9 @@
                 </tbody>
               </table>
             </div>
+
+            <!-- v1.49 페이징 네비게이션 바 (팀원 명부) -->
+            <div id="userPaginationNav" style="display: flex; justify-content: center; align-items: center; gap: 0.3rem; margin-top: 1rem; flex-wrap: wrap;"></div>
           </div>
         </div>
 
@@ -745,6 +791,9 @@
                 </tbody>
               </table>
             </div>
+
+            <!-- v1.49 페이징 네비게이션 바 -->
+            <div id="otPaginationNav" style="display: flex; justify-content: center; align-items: center; gap: 0.3rem; margin-top: 1rem; flex-wrap: wrap;"></div>
           </div>
 
         </div>
@@ -847,6 +896,9 @@
                 </tbody>
               </table>
             </div>
+
+            <!-- v1.49 페이징 네비게이션 바 (팀원 명부) -->
+            <div id="userPaginationNav" style="display: flex; justify-content: center; align-items: center; gap: 0.3rem; margin-top: 1rem; flex-wrap: wrap;"></div>
           </div>
         </div>
 
@@ -1171,15 +1223,15 @@
       </div>
       <div class="modal-body" style="max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1.25rem;">
         
-        <!-- v1.48 (Latest) -->
+        <!-- v1.49 (Latest) -->
         <div style="background: var(--bg-card); border: 2px solid #0d9488; padding: 1.1rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
           <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-            <span style="background: #0d9488; color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.48</span>
+            <span style="background: #0d9488; color: #fff; font-size: 0.88rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px;">v1.49</span>
             <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-main);">최신 정식 릴리즈 (Latest)</span>
             <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">2026-09-22</span>
           </div>
           <div style="font-weight: 800; color: #0d9488; margin-bottom: 0.5rem; font-size: 0.88rem;">
-            🏢 v1.48 복수 팀 원클릭 필터링, 특근 관리 엑셀 가져오기 & 스냅샷 백업 시스템
+            🏢 v1.49 복수 팀 원클릭 필터링, 특근 관리 엑셀 가져오기 & 스냅샷 백업 시스템
           </div>
           <ul style="margin-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.84rem; line-height: 1.6; color: var(--text-main);">
             <li><b>수정 시 소스 스냅샷 백업</b>: 대규모 릴리즈 및 코드 수정 전 코드 백업 스냅샷(`data/code_backups/`) 자동 저장</li>

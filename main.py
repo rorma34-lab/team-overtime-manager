@@ -55,7 +55,7 @@ if not EXTERNAL_URL_FILE.exists():
     except Exception:
         pass
 
-app = FastAPI(title="Team Overtime Manager", version="v1.48")
+app = FastAPI(title="Team Overtime Manager", version="v1.49")
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
