@@ -445,6 +445,7 @@ if (registerForm) {
   } catch (err) {
     console.error(err);
     showToast('등록 중 오류 발생', 'error');
+  }
   });
 }
 
@@ -798,37 +799,15 @@ if (globalSyncBtn) {
   globalSyncBtn.addEventListener('click', async () => {
     showToast('최신 데이터를 동기화하는 중입니다...', 'info');
     try {
-      await 
-  const otSelect = document.getElementById('otPageSizeSelect');
-  if (otSelect) {
-    otSelect.addEventListener('change', (e) => {
-      otPageSize = parseInt(e.target.value, 10) || 20;
-      otCurrentPage = 1;
-      renderAdminOvertimeTable();
-    });
-  }
-
-  const userSelect = document.getElementById('userPageSizeSelect');
-  if (userSelect) {
-    userSelect.addEventListener('change', (e) => {
-      userPageSize = parseInt(e.target.value, 10) || 20;
-      userCurrentPage = 1;
-      renderAdminUserRows();
-    });
-  }
-
-loadTeams();
       if (currentMode === 'admin') {
         await loadAdminData();
-        await loadAdminUserTable();
-        if (typeof loadSettlementSummary === 'function') await loadSettlementSummary();
-      } else {
-        await loadUserOvertimes();
+      } else if (currentUser) {
+        await loadUserOvertimeHistory();
       }
-      showToast('최신 정보로 100% 동기화되었습니다!');
+      showToast('최신 데이터 동기화 완료!');
     } catch (e) {
       console.error(e);
-      showToast('동기화 중 오류가 발생했습니다.', 'error');
+      showToast('동기화 중 오류 발생', 'error');
     }
   });
 }
@@ -3902,26 +3881,7 @@ if (editUserForm) {
       closeModal('userEditModal');
       await loadAdminUserTable();
       await loadAdminData(); // 특근 내역의 성명/팀도 동기화되었으므로 갱신
-      await 
-  const otSelect = document.getElementById('otPageSizeSelect');
-  if (otSelect) {
-    otSelect.addEventListener('change', (e) => {
-      otPageSize = parseInt(e.target.value, 10) || 20;
-      otCurrentPage = 1;
-      renderAdminOvertimeTable();
-    });
-  }
-
-  const userSelect = document.getElementById('userPageSizeSelect');
-  if (userSelect) {
-    userSelect.addEventListener('change', (e) => {
-      userPageSize = parseInt(e.target.value, 10) || 20;
-      userCurrentPage = 1;
-      renderAdminUserRows();
-    });
-  }
-
-loadTeams();
+      await loadTeams();
     } catch (err) {
       console.error(err);
       showToast('서버 통신 오류', 'error');
@@ -4007,24 +3967,7 @@ async function handleDeleteUser(empId, uName = '') {
     }
     showToast(data.message || '회원이 삭제되었습니다.');
     await loadAdminUserTable();
-    await 
-  const otSelect = document.getElementById('otPageSizeSelect');
-  if (otSelect) {
-    otSelect.addEventListener('change', (e) => {
-      otPageSize = parseInt(e.target.value, 10) || 20;
-      otCurrentPage = 1;
-      renderAdminOvertimeTable();
-    });
-  }
-
-  const userSelect = document.getElementById('userPageSizeSelect');
-  if (userSelect) {
-    userSelect.addEventListener('change', (e) => {
-      userPageSize = parseInt(e.target.value, 10) || 20;
-      userCurrentPage = 1;
-      renderAdminUserRows();
-    });
-  }
+    await loadTeams();
 
 loadTeams();
     renderTeamManageList();
@@ -4194,24 +4137,7 @@ var _el_addNewUserModalBtn = document.getElementById('addNewUserModalBtn'); if (
   regEmpId.removeAttribute('readonly');
   regEmpId.placeholder = '사원번호 입력 (예: 2024002)';
   document.getElementById('regName').value = '';
-  await 
-  const otSelect = document.getElementById('otPageSizeSelect');
-  if (otSelect) {
-    otSelect.addEventListener('change', (e) => {
-      otPageSize = parseInt(e.target.value, 10) || 20;
-      otCurrentPage = 1;
-      renderAdminOvertimeTable();
-    });
-  }
-
-  const userSelect = document.getElementById('userPageSizeSelect');
-  if (userSelect) {
-    userSelect.addEventListener('change', (e) => {
-      userPageSize = parseInt(e.target.value, 10) || 20;
-      userCurrentPage = 1;
-      renderAdminUserRows();
-    });
-  }
+  await loadTeams();
 
 loadTeams();
   document.getElementById('regTeam').value = '';
@@ -4224,24 +4150,7 @@ window.openTeamManageModal = async function() {
   openModal('teamManageModal');
   renderTeamManageList();
   try {
-    await 
-  const otSelect = document.getElementById('otPageSizeSelect');
-  if (otSelect) {
-    otSelect.addEventListener('change', (e) => {
-      otPageSize = parseInt(e.target.value, 10) || 20;
-      otCurrentPage = 1;
-      renderAdminOvertimeTable();
-    });
-  }
-
-  const userSelect = document.getElementById('userPageSizeSelect');
-  if (userSelect) {
-    userSelect.addEventListener('change', (e) => {
-      userPageSize = parseInt(e.target.value, 10) || 20;
-      userCurrentPage = 1;
-      renderAdminUserRows();
-    });
-  }
+    await loadTeams();
 
 loadTeams();
     renderTeamManageList();
@@ -4283,24 +4192,7 @@ if (addTeamForm) {
       }
       input.value = '';
       showToast(data.message);
-      await 
-  const otSelect = document.getElementById('otPageSizeSelect');
-  if (otSelect) {
-    otSelect.addEventListener('change', (e) => {
-      otPageSize = parseInt(e.target.value, 10) || 20;
-      otCurrentPage = 1;
-      renderAdminOvertimeTable();
-    });
-  }
-
-  const userSelect = document.getElementById('userPageSizeSelect');
-  if (userSelect) {
-    userSelect.addEventListener('change', (e) => {
-      userPageSize = parseInt(e.target.value, 10) || 20;
-      userCurrentPage = 1;
-      renderAdminUserRows();
-    });
-  }
+      await loadTeams();
 
 loadTeams();
       renderTeamManageList();
@@ -4806,24 +4698,7 @@ async function loadBackupList() {
           closeModal('backupModal');
 
           // 복원 후 화면 및 세션 갱신
-          await 
-  const otSelect = document.getElementById('otPageSizeSelect');
-  if (otSelect) {
-    otSelect.addEventListener('change', (e) => {
-      otPageSize = parseInt(e.target.value, 10) || 20;
-      otCurrentPage = 1;
-      renderAdminOvertimeTable();
-    });
-  }
-
-  const userSelect = document.getElementById('userPageSizeSelect');
-  if (userSelect) {
-    userSelect.addEventListener('change', (e) => {
-      userPageSize = parseInt(e.target.value, 10) || 20;
-      userCurrentPage = 1;
-      renderAdminUserRows();
-    });
-  }
+          await loadTeams();
 
 loadTeams();
           if (currentUser) {
@@ -4889,24 +4764,6 @@ if (btnRefreshBackupList) {
 }
 
 // ===== 17. 초기 로드 및 모바일 세션 자동 복원 (요구사항 1, 6) =====
-
-  const otSelect = document.getElementById('otPageSizeSelect');
-  if (otSelect) {
-    otSelect.addEventListener('change', (e) => {
-      otPageSize = parseInt(e.target.value, 10) || 20;
-      otCurrentPage = 1;
-      renderAdminOvertimeTable();
-    });
-  }
-
-  const userSelect = document.getElementById('userPageSizeSelect');
-  if (userSelect) {
-    userSelect.addEventListener('change', (e) => {
-      userPageSize = parseInt(e.target.value, 10) || 20;
-      userCurrentPage = 1;
-      renderAdminUserRows();
-    });
-  }
 
 loadTeams();
 
