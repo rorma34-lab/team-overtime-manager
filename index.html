@@ -445,10 +445,10 @@
               <button class="btn btn-primary btn-sm" id="exportExcelBtn" title="선택된 조건의 특근 내역을 엑셀로 내보냅니다">
                 📤 엑셀(.xlsx) 내보내기
               </button>
-              <button class="btn btn-secondary btn-sm" id="importOvertimeExcelBtn" title="엑셀 파일(휴일일자별_특근현황 시트)에서 특근 내역을 가져와 DB를 갱신합니다" style="background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%); color: #ffffff; border: none; font-weight: 700;">
+              <button class="btn btn-secondary btn-sm" id="importOvertimeExcelBtn" onclick="triggerOvertimeExcelImport()" title="엑셀 파일(휴일일자별_특근현황 시트)에서 특근 내역을 가져와 DB를 갱신합니다" style="background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%); color: #ffffff; border: none; font-weight: 700;">
                 📥 엑셀(.xlsx) 가져오기
               </button>
-              <input type="file" id="overtimeExcelFileInput" accept=".xlsx, .xls" style="display: none;" />
+              <input type="file" id="overtimeExcelFileInput" accept=".xlsx, .xls" style="display: none;" onchange="handleOvertimeExcelFileSelected(this)" />
               <a href="/api/manual/admin" class="btn btn-secondary btn-sm" title="관리자 운영 매뉴얼 PPTX 다운로드" style="text-decoration: none;">
                 📖 관리자 매뉴얼
               </a>
@@ -638,9 +638,9 @@
             <div class="card-header">
               <h2 class="card-title">👥 팀원 명부 및 관리자 권한 관리</h2>
               <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-                <button class="btn btn-secondary btn-sm" id="exportUsersBtn">📥 팀원 엑셀 내보내기</button>
-                <button class="btn btn-secondary btn-sm" id="importUsersBtn">📤 엑셀 가져오기</button>
-                <input type="file" id="userExcelFileInput" accept=".xlsx, .xls, .csv" style="display: none;">
+                <button class="btn btn-secondary btn-sm" id="exportUsersBtn">📤 팀원 엑셀 내보내기</button>
+                <button class="btn btn-secondary btn-sm" id="importUsersBtn" onclick="triggerUserExcelImport()">📥 팀원 엑셀 가져오기</button>
+                <input type="file" id="userExcelFileInput" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handleUserExcelFileSelected(this)">
                 <button class="btn btn-primary btn-sm" id="addNewUserModalBtn">+ 신규 팀원 추가</button>
                 <button class="btn btn-warning btn-sm" id="manageTeamsBtn" onclick="openTeamManageModal()">🏢 소속팀 관리</button>
               </div>

@@ -3207,6 +3207,10 @@ if (adminProxyOvertimeForm) {
 
 // ===== 11. 엑셀 (.xlsx) 내보내기 =====
 document.getElementById('exportExcelBtn').addEventListener('click', async () => {
+  const exportBtn = document.getElementById('exportExcelBtn');
+  const restoreExportBtn = setButtonLoading(exportBtn, '⏳ 특근 엑셀 생성 중...');
+  showToast('엑셀 파일을 생성 중입니다...');
+
   let targetList = [];
   if (selectedOvertimeIds.size > 0) {
     targetList = lastFetchedOvertimes.filter(o => selectedOvertimeIds.has(o.id));
@@ -3215,13 +3219,11 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
   }
 
   if (!targetList || targetList.length === 0) {
+    alert("🚨 [특근 엑셀 내보내기 안내]\n\n내보낼 특근 내역이 없습니다. 검색 필터를 확인해 주세요.");
     showToast('내보낼 특근 내역이 없습니다.', 'error');
+    restoreExportBtn();
     return;
   }
-
-  const exportBtn = document.getElementById('exportExcelBtn');
-  const restoreExportBtn = setButtonLoading(exportBtn, '엑셀 생성 중...');
-  showToast('엑셀 파일을 생성 중입니다...');
 
   // 1. 고품질 다중 시트 openpyxl 백엔드 API 우선 호출 (서버 환경)
   try {
@@ -3885,49 +3887,69 @@ async function handleDeleteUser(empId, uName = '') {
 window.handleDeleteUser = handleDeleteUser;
 
 // 요구사항 12: 팀원 명부 엑셀 내보내기
-document.getElementById('exportUsersBtn').addEventListener('click', () => {
-  if (!allUsersCache || allUsersCache.length === 0) {
-    showToast('등록된 팀원 정보가 없습니다.', 'error');
-    return;
-  }
-  if (typeof XLSX === 'undefined') {
-    showToast('엑셀 라이브러리를 로드 중입니다.', 'error');
-    return;
-  }
+document.getElementById('exportUsersBtn')?.addEventListener('click', () => {
+  const btn = document.getElementById('exportUsersBtn');
+  const restoreBtn = setButtonLoading(btn, '⏳ 팀원명부 엑셀 생성 중...');
 
-  const rows = allUsersCache.map((u, idx) => ({
-    "순번": idx + 1,
-    "사원번호": u.emp_id,
-    "성명": u.name,
-    "소속팀": u.team,
-    "직급": u.position || '팀원',
-    "관리자여부": (u.is_admin || u.is_super) ? '관리자' : '일반',
-    "등록일시": u.created_at || '-'
-  }));
+  try {
+    if (!allUsersCache || allUsersCache.length === 0) {
+      alert("🚨 [팀원 명부 내보내기 안내]\n\n등록된 팀원 정보가 없습니다.");
+      showToast('등록된 팀원 정보가 없습니다.', 'error');
+      return;
+    }
+    if (typeof XLSX === 'undefined') {
+      alert("🚨 [엑셀 모듈 오류]\n\nSheetJS 엑셀 처리 라이브러리를 로드할 수 없습니다. 페이지를 새로고침 해 주세요.");
+      showToast('엑셀 라이브러리를 로드 중입니다.', 'error');
+      return;
+    }
 
-  const worksheet = XLSX.utils.json_to_sheet(rows);
-  worksheet['!cols'] = [
-    { wch: 6 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 20 }
-  ];
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "팀원명부");
-  XLSX.writeFile(workbook, `팀원명부_${getTodayStr()}.xlsx`);
-  showToast('팀원 명부 엑셀 다운로드가 완료되었습니다!');
+    const rows = allUsersCache.map((u, idx) => ({
+      "순번": idx + 1,
+      "사원번호": u.emp_id,
+      "성명": u.name,
+      "소속팀": u.team,
+      "직급": u.position || '팀원',
+      "관리자여부": (u.is_admin || u.is_super) ? '관리자' : '일반',
+      "등록일시": u.created_at || '-'
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    worksheet['!cols'] = [
+      { wch: 6 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 20 }
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "팀원명부");
+    XLSX.writeFile(workbook, `팀원명부_${getTodayStr()}.xlsx`);
+    showToast('팀원 명부 엑셀 다운로드가 완료되었습니다!');
+  } catch (err) {
+    console.error(err);
+    alert("🚨 [팀원 명부 엑셀 내보내기 오류]\n\n" + err.message);
+    showToast('팀원 명부 내보내기 실패', 'error');
+  } finally {
+    restoreBtn();
+  }
 });
 
-// 요구사항 12: 팀원 명부 엑셀 가져오기 (업로드 파싱)
-const userExcelFileInput = document.getElementById('userExcelFileInput');
-document.getElementById('importUsersBtn').addEventListener('click', () => {
-  userExcelFileInput.value = '';
-  userExcelFileInput.click();
-});
+// 요구사항 12: 팀원 명부 엑셀 가져오기 (전역 핸들러)
+window.triggerUserExcelImport = function() {
+  const input = document.getElementById('userExcelFileInput');
+  if (input) {
+    input.value = '';
+    input.click();
+  }
+};
 
-userExcelFileInput.addEventListener('change', async (e) => {
-  const file = e.target.files[0];
+window.handleUserExcelFileSelected = async function(input) {
+  const file = input?.files?.[0];
   if (!file) return;
 
+  const btn = document.getElementById('importUsersBtn');
+  const restoreBtn = setButtonLoading(btn, '⏳ 엑셀 읽는 중...');
+
   if (typeof XLSX === 'undefined') {
+    alert("🚨 [엑셀 라이브러리 미로드]\n\nSheetJS 엑셀 파싱 모듈이 로드되지 않았습니다. 페이지를 새로고침 해 주세요.");
     showToast('엑셀 처리 도구를 로드 중입니다.', 'error');
+    restoreBtn();
     return;
   }
 
@@ -3935,6 +3957,7 @@ userExcelFileInput.addEventListener('change', async (e) => {
   const reader = new FileReader();
   reader.onload = async (evt) => {
     try {
+      setButtonLoading(btn, '⏳ 팀원 정보 갱신 중...');
       const data = new Uint8Array(evt.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
       const firstSheetName = workbook.SheetNames[0];
@@ -3942,7 +3965,9 @@ userExcelFileInput.addEventListener('change', async (e) => {
       const jsonRows = XLSX.utils.sheet_to_json(sheet);
 
       if (!jsonRows || jsonRows.length === 0) {
+        alert("🚨 [팀원 명부 엑셀 가져오기 오류]\n\n선택하신 엑셀 파일에 데이터 행이 없습니다.");
         showToast('엑셀 파일에 데이터가 없습니다.', 'error');
+        restoreBtn();
         return;
       }
 
@@ -3963,17 +3988,14 @@ userExcelFileInput.addEventListener('change', async (e) => {
         }
 
         try {
-          // 기존에 있는지 확인
           const exists = allUsersCache.some(u => u.emp_id.toLowerCase() === empId.toLowerCase());
           if (exists) {
-            // 정보 업데이트
             await fetch(`/api/users/${empId}`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ name, team, position, is_admin: isAdmin })
             });
           } else {
-            // 신규 등록
             await fetch('/api/users/register', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -3987,14 +4009,24 @@ userExcelFileInput.addEventListener('change', async (e) => {
       }
 
       showToast(`총 ${successCount}명의 팀원 정보가 등록/갱신되었습니다! (오류: ${errorCount}건)`);
-      loadAdminUserTable();
+      await loadAdminUserTable();
     } catch (err) {
       console.error(err);
+      alert("🚨 [팀원 명부 엑셀 파싱 오류]\n\n" + err.message + "\n\n💡 [해결 조치]\n올바른 팀원 명부 엑셀 서식인지 확인하세요.");
       showToast('엑셀 파일 파싱 중 오류가 발생했습니다.', 'error');
+    } finally {
+      restoreBtn();
     }
   };
+  reader.onerror = (err) => {
+    alert("🚨 [엑셀 파일 읽기 오류]\n\n" + (err?.message || '파일을 읽을 수 없습니다.'));
+    restoreBtn();
+  };
   reader.readAsArrayBuffer(file);
-});
+};
+
+document.getElementById('importUsersBtn')?.addEventListener('click', window.triggerUserExcelImport);
+document.getElementById('userExcelFileInput')?.addEventListener('change', function() { window.handleUserExcelFileSelected(this); });
 
 // 신규 팀원 추가 모달 열기 (관리자용)
 document.getElementById('addNewUserModalBtn').addEventListener('click', async () => {
@@ -4286,15 +4318,18 @@ if (summaryTeamFilterEl) {
 const exportSummaryExcelBtn = document.getElementById('exportSummaryExcelBtn');
 if (exportSummaryExcelBtn) {
   exportSummaryExcelBtn.addEventListener('click', async () => {
+    const restoreBtn = setButtonLoading(exportSummaryExcelBtn, '⏳ 정산표 엑셀 생성 중...');
     const users = lastFetchedSummary.user_summary || [];
     if (users.length === 0) {
+      alert("🚨 [실특근 정산표 내보내기 안내]\n\n내보낼 정산 데이터가 없습니다. 먼저 정산 조회를 진행해 주세요.");
       showToast('내보낼 정산 데이터가 없습니다.', 'error');
+      restoreBtn();
       return;
     }
 
     const sDate = document.getElementById('summaryStartDate')?.value || '';
     const eDate = document.getElementById('summaryEndDate')?.value || '';
-    const tFilter = selectedDeptFilter || document.getElementById('summaryTeamFilter')?.value || document.getElementById('filterTeam')?.value || '';
+    const tFilter = (selectedDeptFilters && selectedDeptFilters.length > 0) ? selectedDeptFilters.join(',') : (selectedDeptFilter || document.getElementById('summaryTeamFilter')?.value || document.getElementById('filterTeam')?.value || '');
 
     showToast('정산표 엑셀을 생성 중입니다...');
 
@@ -4323,10 +4358,14 @@ if (exportSummaryExcelBtn) {
       }
 
       const errData = await res.json().catch(() => ({}));
+      alert("🚨 [실특근 정산표 엑셀 내보내기 오류]\n\n" + (errData.detail || '정산표 엑셀 생성에 실패했습니다.') + "\n\n💡 [해결 조치]\nstart_server.bat 서버 및 openpyxl 라이브러리를 확인하세요.");
       showToast(errData.detail || '정산표 엑셀 생성에 실패했습니다.', 'error');
     } catch (err) {
       console.error('Settlement export error:', err);
+      alert("🚨 [실특근 정산표 엑셀 통신 오류]\n\n" + err.message);
       showToast('엑셀 다운로드 중 오류가 발생했습니다.', 'error');
+    } finally {
+      restoreBtn();
     }
   });
 }
@@ -4345,9 +4384,9 @@ if (importSummaryExcelBtn && summaryExcelFileInput) {
     const file = e.target.files[0];
     if (!file) return;
 
-    const targetTeam = selectedDeptFilter || document.getElementById('summaryTeamFilter')?.value || document.getElementById('filterTeam')?.value || '';
+    const restoreBtn = setButtonLoading(importSummaryExcelBtn, '⏳ 정산표 읽는 중...');
+    const targetTeam = (selectedDeptFilters && selectedDeptFilters.length > 0) ? selectedDeptFilters.join(',') : (selectedDeptFilter || document.getElementById('summaryTeamFilter')?.value || document.getElementById('filterTeam')?.value || '');
 
-    // 1. 진행중 안내 모달 표시 (요구사항 4)
     const progressDeptBadge = document.getElementById('importProgressDeptBadge');
     if (progressDeptBadge) {
       progressDeptBadge.textContent = `🏢 부서 현황: ${targetTeam ? targetTeam : '전체 부서 (모든 부서 반영)'}`;
@@ -4357,6 +4396,7 @@ if (importSummaryExcelBtn && summaryExcelFileInput) {
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
+        setButtonLoading(importSummaryExcelBtn, '⏳ 정산 데이터 반영 중...');
         const rawResult = evt.target.result || '';
         const base64Content = rawResult.includes(',') ? rawResult.split(',')[1] : rawResult;
 
@@ -4375,66 +4415,69 @@ if (importSummaryExcelBtn && summaryExcelFileInput) {
 
         const data = await res.json().catch(() => ({}));
 
-      // 2. 결과 / 실패 사유 모달 표시 (요구사항 4)
-      const banner = document.getElementById('importResultBanner');
-      const statTotal = document.getElementById('importStatTotal');
-      const statProcessed = document.getElementById('importStatProcessed');
-      const statSkipped = document.getElementById('importStatSkipped');
-      const statErrors = document.getElementById('importStatErrors');
-      const deptRuleBox = document.getElementById('importResultDeptRuleBox');
-      const errSection = document.getElementById('importErrorDetailsSection');
-      const errList = document.getElementById('importErrorDetailsList');
+        const banner = document.getElementById('importResultBanner');
+        const statTotal = document.getElementById('importStatTotal');
+        const statProcessed = document.getElementById('importStatProcessed');
+        const statSkipped = document.getElementById('importStatSkipped');
+        const statErrors = document.getElementById('importStatErrors');
+        const deptRuleBox = document.getElementById('importResultDeptRuleBox');
+        const errSection = document.getElementById('importErrorDetailsSection');
+        const errList = document.getElementById('importErrorDetailsList');
 
-      if (statTotal) statTotal.textContent = data.total_rows || 0;
-      if (statProcessed) statProcessed.textContent = data.processed_count || 0;
-      if (statSkipped) statSkipped.textContent = data.skipped_other_dept_count || 0;
-      if (statErrors) statErrors.textContent = data.error_count || (res.ok ? 0 : 1);
+        if (statTotal) statTotal.textContent = data.total_rows || 0;
+        if (statProcessed) statProcessed.textContent = data.processed_count || 0;
+        if (statSkipped) statSkipped.textContent = data.skipped_other_dept_count || 0;
+        if (statErrors) statErrors.textContent = data.error_count || (res.ok ? 0 : 1);
 
-      if (res.ok && data.success !== false) {
-        if (banner) {
-          banner.style.background = '#ecfdf5';
-          banner.style.color = '#047857';
-          banner.style.border = '1px solid #10b981';
-          banner.innerHTML = `<span>✅</span> <span>정산표 엑셀 가져오기가 성공적으로 완료되었습니다!</span>`;
-        }
-        if (deptRuleBox) {
-          if (targetTeam) {
-            deptRuleBox.innerHTML = `🛡️ <b>부서 데이터 격리 적용</b>: 선택된 부서(<b>${escapeHtml(targetTeam)}</b>)의 <b>${data.processed_count || 0}건</b>만 반영되었으며, 타 부서 <b>${data.skipped_other_dept_count || 0}건</b>의 정보는 100% 변경 없이 안전하게 보존되었습니다.`;
-          } else {
-            deptRuleBox.innerHTML = `🛡️ <b>전체 부서 데이터 반영</b>: 엑셀 파일 내 모든 부서의 데이터가 수집/반영되었습니다.`;
+        if (res.ok && data.success !== false) {
+          if (banner) {
+            banner.style.background = '#ecfdf5';
+            banner.style.color = '#047857';
+            banner.style.border = '1px solid #10b981';
+            banner.innerHTML = `<span>✅</span> <span>정산표 엑셀 가져오기가 성공적으로 완료되었습니다!</span>`;
           }
-        }
-        showToast('엑셀 정산 데이터가 정상 반영되었습니다!');
-        loadSettlementSummary();
-        loadAdminData();
-      } else {
-        if (banner) {
-          banner.style.background = '#fef2f2';
-          banner.style.color = '#b91c1c';
-          banner.style.border = '1px solid #ef4444';
-          banner.innerHTML = `<span>❌</span> <span>정산표 엑셀 가져오기 실패</span>`;
-        }
-        if (deptRuleBox) {
+          if (deptRuleBox) {
+            if (targetTeam) {
+              deptRuleBox.innerHTML = `🛡️ <b>부서 데이터 격리 적용</b>: 선택된 부서(<b>${escapeHtml(targetTeam)}</b>)의 <b>${data.processed_count || 0}건</b>만 반영되었으며, 타 부서 <b>${data.skipped_other_dept_count || 0}건</b>의 정보는 100% 변경 없이 안전하게 보존되었습니다.`;
+            } else {
+              deptRuleBox.innerHTML = `🛡️ <b>전체 부서 데이터 반영</b>: 엑셀 파일 내 모든 부서의 데이터가 수집/반영되었습니다.`;
+            }
+          }
+          showToast('엑셀 정산 데이터가 정상 반영되었습니다!');
+          await loadSettlementSummary();
+          await loadAdminData();
+        } else {
           const detailMsg = data.detail || data.message || '파일 처리 중 오류가 발생했습니다.';
-          deptRuleBox.innerHTML = `⚠️ <b>실패 사유</b>: <span style="color:#b91c1c;">${escapeHtml(detailMsg)}</span>`;
+          alert("🚨 [실특근 정산표 가져오기 오류]\n\n" + detailMsg + "\n\n💡 [해결 조치]\n업로드한 엑셀 파일이 실특근 정산표 양식인지 확인해 주세요.");
+          if (banner) {
+            banner.style.background = '#fef2f2';
+            banner.style.color = '#b91c1c';
+            banner.style.border = '1px solid #ef4444';
+            banner.innerHTML = `<span>❌</span> <span>정산표 엑셀 가져오기 실패</span>`;
+          }
+          if (deptRuleBox) {
+            deptRuleBox.innerHTML = `⚠️ <b>실패 사유</b>: <span style="color:#b91c1c;">${escapeHtml(detailMsg)}</span>`;
+          }
+          showToast(detailMsg, 'error');
         }
-        showToast(data.detail || '가져오기 실패', 'error');
-      }
 
-      const errors = data.errors || [];
-      if (errors.length > 0 && errSection && errList) {
-        errSection.style.display = 'block';
-        errList.innerHTML = errors.map(err => `<div>• ${escapeHtml(err)}</div>`).join('');
-      } else if (errSection) {
-        errSection.style.display = 'none';
-      }
+        const errors = data.errors || [];
+        if (errors.length > 0 && errSection && errList) {
+          errSection.style.display = 'block';
+          errList.innerHTML = errors.map(err => `<div>• ${escapeHtml(err)}</div>`).join('');
+        } else if (errSection) {
+          errSection.style.display = 'none';
+        }
 
-      openModal('settlementImportResultModal');
-    } catch (err) {
-      console.error('Import error:', err);
-      closeModal('settlementImportProgressModal');
-      showToast('엑셀 업로드 통신 오류가 발생했습니다.', 'error');
-    }
+        openModal('settlementImportResultModal');
+      } catch (err) {
+        console.error('Import error:', err);
+        closeModal('settlementImportProgressModal');
+        alert("🚨 [실특근 정산표 업로드 통신 오류]\n\n" + err.message + "\n\n💡 [해결 조치]\nstart_server.bat 백엔드 서버가 켜져 있는지 확인하세요.");
+        showToast('엑셀 업로드 통신 오류가 발생했습니다.', 'error');
+      } finally {
+        restoreBtn();
+      }
     };
     reader.readAsDataURL(file);
   });
@@ -4470,7 +4513,7 @@ async function saveWebBackup() {
   const nameInput = document.getElementById('backupCustomNameInput');
   const customName = nameInput ? nameInput.value.trim() : '';
   const btn = document.getElementById('btnExecuteWebBackupSave');
-  const restoreBtn = setButtonLoading(btn, '스냅샷 생성 저장 중...');
+  const restoreBtn = setButtonLoading(btn, '⏳ 스냅샷 저장 중...');
 
   try {
     const res = await fetch('/api/backup/save', {
@@ -4480,6 +4523,7 @@ async function saveWebBackup() {
     });
     const data = await res.json();
     if (!res.ok) {
+      alert("🚨 [스냅샷 백업 저장 오류]\n\n" + (data.detail || '스냅샷 저장이 실패했습니다.') + "\n\n💡 [해결 조치]\nstart_server.bat 백엔드 서버 상태 및 overtime.db 권한을 확인하세요.");
       showToast(data.detail || '스냅샷 저장 실패', 'error');
       return;
     }
@@ -4489,6 +4533,7 @@ async function saveWebBackup() {
     await loadBackupList();
   } catch (err) {
     console.error(err);
+    alert("🚨 [스냅샷 백업 통신 오류]\n\n" + err.message);
     showToast('백업 저장 중 통신 오류가 발생했습니다.', 'error');
   } finally {
     restoreBtn();
@@ -4535,6 +4580,8 @@ async function loadBackupList() {
           return;
         }
 
+        const restoreBtn = setButtonLoading(btn, '⏳ 스냅샷 복원(열기) 중...');
+
         try {
           const rRes = await fetch('/api/backup/load', {
             method: 'POST',
@@ -4543,6 +4590,7 @@ async function loadBackupList() {
           });
           const rData = await rRes.json();
           if (!rRes.ok) {
+            alert("🚨 [스냅샷 복원(열기) 오류]\n\n" + (rData.detail || '스냅샷 복원에 실패했습니다.') + "\n\n💡 [해결 조치]\n해당 스냅샷 파일(data/backups/)이 정상 존재하는지 확인해 주세요.");
             showToast(rData.detail || '복원 실패', 'error');
             return;
           }
@@ -4575,7 +4623,10 @@ async function loadBackupList() {
           }
         } catch (err) {
           console.error(err);
+          alert("🚨 [스냅샷 복원 통신 오류]\n\n" + err.message);
           showToast('복원 중 통신 오류가 발생했습니다.', 'error');
+        } finally {
+          restoreBtn();
         }
       });
     });
@@ -4751,8 +4802,9 @@ function renderAccessLogs(logs) {
 // 엑셀 내보내기 이벤트 바인딩
 const exportAccessLogsBtn = document.getElementById('exportAccessLogsBtn');
 if (exportAccessLogsBtn) {
-  exportAccessLogsBtn.addEventListener('click', () => {
+  exportAccessLogsBtn.addEventListener('click', async () => {
     if (!currentUser) return;
+    const restoreBtn = setButtonLoading(exportAccessLogsBtn, '⏳ 감사로그 엑셀 생성 중...');
     const startDate = document.getElementById('accessFilterStartDate')?.value || '';
     const endDate = document.getElementById('accessFilterEndDate')?.value || '';
     const actionType = document.getElementById('accessFilterAction')?.value || '';
@@ -4767,7 +4819,32 @@ if (exportAccessLogsBtn) {
     if (search) params.push(`search=${encodeURIComponent(search)}`);
 
     showToast('감사 로그 엑셀 다운로드를 시작합니다...');
-    window.location.href = `/api/admin/access-logs/export?${params.join('&')}`;
+
+    try {
+      const res = await fetch(`/api/admin/access-logs/export?${params.join('&')}`);
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `보안감사로그_${getTodayStr()}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        showToast('보안 감사 로그 다운로드가 완료되었습니다!');
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      alert("🚨 [감사 로그 내보내기 오류]\n\n" + (data.detail || '감사 로그 엑셀 내보내기 실패') + "\n\n💡 [해결 조치]\n관리자 권한 및 백엔드 서버 상태를 확인하세요.");
+      showToast(data.detail || '다운로드 실패', 'error');
+    } catch (err) {
+      console.error(err);
+      alert("🚨 [감사 로그 내보내기 통신 오류]\n\n" + err.message);
+      showToast('감사 로그 다운로드 중 오류 발생', 'error');
+    } finally {
+      restoreBtn();
+    }
   });
 }
 
@@ -5387,58 +5464,89 @@ if (btnRefreshSuggestions) {
 }
 
 // ===== 16. 특근 엑셀 가져오기 (importOvertimeExcelBtn / overtimeExcelFileInput) =====
-const importOvertimeExcelBtn = document.getElementById('importOvertimeExcelBtn');
-const overtimeExcelFileInput = document.getElementById('overtimeExcelFileInput');
-
-if (importOvertimeExcelBtn && overtimeExcelFileInput) {
-  importOvertimeExcelBtn.addEventListener('click', () => {
-    overtimeExcelFileInput.click();
-  });
-
-  overtimeExcelFileInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const activeDepts = getActiveDeptFilters();
-    showToast('특근 엑셀 데이터를 검증 및 가져오는 중입니다...', 'info');
-
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const base64Data = evt.target.result.split(',')[1] || evt.target.result;
-        const res = await fetch('/api/overtimes/import-excel', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            file_b64: base64Data,
-            target_teams: activeDepts.join(','),
-            admin_emp_id: currentUser ? currentUser.emp_id : ''
-          })
-        });
-        const data = await res.json();
-        overtimeExcelFileInput.value = '';
-
-        if (!res.ok || !data.success) {
-          showToast(`엑셀 가져오기 실패: ${data.message || data.detail || '오류 발생'}`, 'error');
-          return;
-        }
-
-        showExcelImportResultModal(data, activeDepts);
-        loadAdminData();
-        loadAdminUserTable();
-      } catch (err) {
-        console.error(err);
-        overtimeExcelFileInput.value = '';
-        showToast('엑셀 업로드 중 통신 오류가 발생했습니다.', 'error');
-      }
-    };
-    reader.onerror = () => {
-      overtimeExcelFileInput.value = '';
-      showToast('엑셀 파일을 읽는 도중 오류가 발생했습니다.', 'error');
-    };
-    reader.readAsDataURL(file);
-  });
+function triggerOvertimeExcelImport() {
+  const input = document.getElementById('overtimeExcelFileInput');
+  if (input) {
+    input.value = '';
+    input.click();
+  } else {
+    alert('❌ 파일 업로드 입력 요소를 찾을 수 없습니다.');
+  }
 }
+
+async function handleOvertimeExcelFileSelected(inputEl) {
+  const file = inputEl.files ? inputEl.files[0] : null;
+  if (!file) return;
+
+  const btn = document.getElementById('importOvertimeExcelBtn');
+  const origBtnHtml = btn ? btn.innerHTML : '📥 엑셀(.xlsx) 가져오기';
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ 엑셀 읽는 중...';
+  }
+
+  const activeDepts = getActiveDeptFilters();
+  showToast('특근 엑셀 데이터를 읽고 검증하는 중입니다...', 'info');
+
+  const reader = new FileReader();
+  reader.onload = async (evt) => {
+    try {
+      if (btn) btn.innerHTML = '⏳ 데이터 갱신 중...';
+      const base64Data = evt.target.result.split(',')[1] || evt.target.result;
+
+      const res = await fetch('/api/overtimes/import-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          file_b64: base64Data,
+          target_teams: activeDepts.join(','),
+          admin_emp_id: currentUser ? currentUser.emp_id : ''
+        })
+      });
+
+      const data = await res.json();
+      inputEl.value = '';
+
+      if (!res.ok || !data.success) {
+        const errMsg = data.message || data.detail || '백엔드 처리 실패';
+        showToast(`엑셀 가져오기 실패: ${errMsg}`, 'error');
+        alert(`❌ 엑셀 가져오기 실패\n\n사유: ${errMsg}\n\n도움말:\n1. 백엔드 서버(start_server.bat)가 최근 재시작되었는지 확인하세요.\n2. 올바른 특근 엑셀 파일(첫 번째 시트: 휴일일자별_특근현황)인지 확인해 주세요.`);
+        return;
+      }
+
+      showToast('🎉 특근 엑셀 가져오기가 성공적으로 완료되었습니다.', 'success');
+      showExcelImportResultModal(data, activeDepts);
+      loadAdminData();
+      loadAdminUserTable();
+    } catch (err) {
+      console.error(err);
+      inputEl.value = '';
+      showToast('엑셀 업로드 중 통신 오류가 발생했습니다.', 'error');
+      alert(`❌ 엑셀 가져오기 통신 오류\n\n사유: 백엔드 API 서버 응답이 없습니다.\n\n해결 방법:\n1. start_server.bat 콘솔 창이 열려 있는지 확인하세요.\n2. 콘솔 창을 재시작한 후 브라우저(F5)를 새로고침하세요.`);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origBtnHtml;
+      }
+    }
+  };
+
+  reader.onerror = () => {
+    inputEl.value = '';
+    showToast('엑셀 파일을 읽는 도중 오류가 발생했습니다.', 'error');
+    alert('❌ 엑셀 파일 읽기 오류가 발생했습니다.');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origBtnHtml;
+    }
+  };
+
+  reader.readAsDataURL(file);
+}
+
+window.triggerOvertimeExcelImport = triggerOvertimeExcelImport;
+window.handleOvertimeExcelFileSelected = handleOvertimeExcelFileSelected;
 
 function showExcelImportResultModal(data, activeDepts) {
   const modal = document.getElementById('excelImportResultModal');
