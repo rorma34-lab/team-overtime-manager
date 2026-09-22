@@ -344,13 +344,6 @@ function escapeHtml(str) {
 }
 
 // ===== 1. 로그인 플로우 =====
-const loginForm = document.getElementById('loginForm');
-loginForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const empId = document.getElementById('empIdInput').value.trim();
-  if (empId) handleLogin(empId);
-});
-
 async function handleLogin(empId) {
   empId = (empId || '').trim();
   if (!validateEmpIdClient(empId)) return;
@@ -395,7 +388,18 @@ async function handleLogin(empId) {
   }
 }
 window.handleLogin = handleLogin;
-registerForm.addEventListener('submit', async (e) => {
+
+const loginForm = document.getElementById('loginForm');
+if (loginForm) {
+  loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const empId = document.getElementById('empIdInput').value.trim();
+    if (empId) handleLogin(empId);
+  });
+}
+const registerForm = document.getElementById('registerForm');
+if (registerForm) {
+  registerForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const empId = document.getElementById('regEmpId').value.trim();
   const name = document.getElementById('regName').value.trim();
@@ -441,8 +445,8 @@ registerForm.addEventListener('submit', async (e) => {
   } catch (err) {
     console.error(err);
     showToast('등록 중 오류 발생', 'error');
-  }
-});
+  });
+}
 
 function setUserSession(user) {
   currentUser = user;
@@ -526,7 +530,7 @@ function setUserSession(user) {
   loadUserOvertimes();
 }
 
-document.getElementById('logoutBtn').addEventListener('click', async () => {
+var _el_logoutBtn = document.getElementById('logoutBtn'); if (_el_logoutBtn) _el_logoutBtn.addEventListener('click', async () => {
   // 로그아웃 감사 로그 기록
   if (currentUser && currentUser.emp_id) {
     try {
@@ -563,7 +567,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   }
 });
 
-document.getElementById('brandHomeBtn').addEventListener('click', () => {
+var _el_brandHomeBtn = document.getElementById('brandHomeBtn'); if (_el_brandHomeBtn) _el_brandHomeBtn.addEventListener('click', () => {
   if (currentUser) switchMode('user');
 });
 
@@ -710,7 +714,7 @@ function handleCalCellClick(dateStr) {
 }
 
 // 시작일 변경 시: 종료일도 동일 날짜로 우선 자동 변경 (요구사항 2)
-document.getElementById('startDateInput').addEventListener('change', (e) => {
+var _el_startDateInput = document.getElementById('startDateInput'); if (_el_startDateInput) _el_startDateInput.addEventListener('change', (e) => {
   const newDate = e.target.value;
   if (!newDate) return;
   
@@ -739,7 +743,7 @@ document.getElementById('startDateInput').addEventListener('change', (e) => {
 });
 
 // 종료일 변경 시: 첫 선택 시 시작일도 동기화, 또는 두 번째 날짜로 범위 설정 (요구사항 2)
-document.getElementById('endDateInput').addEventListener('change', (e) => {
+var _el_endDateInput = document.getElementById('endDateInput'); if (_el_endDateInput) _el_endDateInput.addEventListener('change', (e) => {
   const newDate = e.target.value;
   if (!newDate) return;
 
@@ -926,7 +930,7 @@ overtimeForm.addEventListener('submit', async (e) => {
 });
 
 // ===== 5. 본인 특근 내역 조회 및 통계 / 달력 (요구사항 4) =====
-document.getElementById('userRefreshBtn').addEventListener('click', loadUserOvertimes);
+var _el_userRefreshBtn = document.getElementById('userRefreshBtn'); if (_el_userRefreshBtn) _el_userRefreshBtn.addEventListener('click', loadUserOvertimes);
 
 let userViewMode = 'list'; // 'list' | 'calendar'
 
@@ -3080,18 +3084,19 @@ window.openAdminEditModal = openAdminEditModal;
 
 // 필터 바 이벤트
 ['filterStartDate', 'filterEndDate', 'filterCategory', 'filterStatus'].forEach(id => {
-  document.getElementById(id).addEventListener('change', loadAdminData);
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', loadAdminData);
 });
-document.getElementById('filterTeam').addEventListener('change', (e) => {
+var _el_filterTeam = document.getElementById('filterTeam'); if (_el_filterTeam) _el_filterTeam.addEventListener('change', (e) => {
   selectedDeptFilter = e.target.value;
   const summaryTeamEl = document.getElementById('summaryTeamFilter');
   if (summaryTeamEl) summaryTeamEl.value = selectedDeptFilter;
   loadAdminData();
   loadAdminUserTable();
 });
-document.getElementById('filterSearch').addEventListener('input', debounce(loadAdminData, 300));
+var _el_filterSearch = document.getElementById('filterSearch'); if (_el_filterSearch) _el_filterSearch.addEventListener('input', debounce(loadAdminData, 300));
 
-document.getElementById('filterResetBtn').addEventListener('click', () => {
+var _el_filterResetBtn = document.getElementById('filterResetBtn'); if (_el_filterResetBtn) _el_filterResetBtn.addEventListener('click', () => {
   document.getElementById('filterStartDate').value = '';
   document.getElementById('filterEndDate').value = '';
   document.getElementById('filterTeam').value = '';
@@ -3291,7 +3296,7 @@ if (adminProxyOvertimeForm) {
 }
 
 // ===== 11. 엑셀 (.xlsx) 내보내기 =====
-document.getElementById('exportExcelBtn').addEventListener('click', async () => {
+var _el_exportExcelBtn = document.getElementById('exportExcelBtn'); if (_el_exportExcelBtn) _el_exportExcelBtn.addEventListener('click', async () => {
   const exportBtn = document.getElementById('exportExcelBtn');
   const restoreExportBtn = setButtonLoading(exportBtn, '⏳ 특근 엑셀 생성 중...');
   showToast('엑셀 파일을 생성 중입니다...');
@@ -4174,7 +4179,7 @@ document.getElementById('importUsersBtn')?.addEventListener('click', window.trig
 document.getElementById('userExcelFileInput')?.addEventListener('change', function() { window.handleUserExcelFileSelected(this); });
 
 // 신규 팀원 추가 모달 열기 (관리자용)
-document.getElementById('addNewUserModalBtn').addEventListener('click', async () => {
+var _el_addNewUserModalBtn = document.getElementById('addNewUserModalBtn'); if (_el_addNewUserModalBtn) _el_addNewUserModalBtn.addEventListener('click', async () => {
   isAddingMemberFromAdmin = true;
   const modal = document.getElementById('registerModal');
   const title = modal.querySelector('.modal-title');
@@ -4311,7 +4316,7 @@ loadTeams();
 
 
 // 모바일 접속 QR 모달 열기 (외부 접속망 기본 제공)
-document.getElementById('qrModalOpenBtn').addEventListener('click', async () => {
+var _el_qrModalOpenBtn = document.getElementById('qrModalOpenBtn'); if (_el_qrModalOpenBtn) _el_qrModalOpenBtn.addEventListener('click', async () => {
   try {
     const res = await fetch('/api/system/info');
     const data = await res.json();
