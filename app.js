@@ -5517,8 +5517,10 @@ async function handleOvertimeExcelFileSelected(inputEl) {
 
       showToast('🎉 특근 엑셀 가져오기가 성공적으로 완료되었습니다.', 'success');
       showExcelImportResultModal(data, activeDepts);
-      loadAdminData();
-      loadAdminUserTable();
+      if (typeof loadAdminData === 'function') await loadAdminData();
+      if (typeof loadAdminUserTable === 'function') await loadAdminUserTable();
+      if (typeof loadSettlementSummary === 'function') await loadSettlementSummary();
+      if (typeof loadUserOvertimes === 'function') await loadUserOvertimes();
     } catch (err) {
       console.error(err);
       inputEl.value = '';
