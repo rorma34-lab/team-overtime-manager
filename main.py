@@ -952,8 +952,14 @@ def list_overtimes(
         query += " AND start_date <= ?"
         params.append(end_date.strip())
     if team:
-        query += " AND team = ?"
-        params.append(team.strip())
+        teams = [t.strip() for t in team.split(",") if t.strip()]
+        if len(teams) == 1:
+            query += " AND team = ?"
+            params.append(teams[0])
+        elif len(teams) > 1:
+            placeholders = ",".join("?" for _ in teams)
+            query += f" AND team IN ({placeholders})"
+            params.extend(teams)
     if category:
         query += " AND category = ?"
         params.append(category.strip())
@@ -1167,8 +1173,14 @@ def get_overtime_summary(
         query += " AND start_date <= ?"
         params.append(end_date.strip())
     if team:
-        query += " AND team = ?"
-        params.append(team.strip())
+        teams = [t.strip() for t in team.split(",") if t.strip()]
+        if len(teams) == 1:
+            query += " AND team = ?"
+            params.append(teams[0])
+        elif len(teams) > 1:
+            placeholders = ",".join("?" for _ in teams)
+            query += f" AND team IN ({placeholders})"
+            params.extend(teams)
 
     cursor.execute(query, params)
     rows = [dict(r) for r in cursor.fetchall()]
@@ -2027,8 +2039,14 @@ async def export_settlement(req: Request):
         query += " AND start_date <= ?"
         params.append(end_date.strip())
     if team:
-        query += " AND team = ?"
-        params.append(team.strip())
+        teams = [t.strip() for t in team.split(",") if t.strip()]
+        if len(teams) == 1:
+            query += " AND team = ?"
+            params.append(teams[0])
+        elif len(teams) > 1:
+            placeholders = ",".join("?" for _ in teams)
+            query += f" AND team IN ({placeholders})"
+            params.extend(teams)
     cursor.execute(query, params)
     rows = [dict(r) for r in cursor.fetchall()]
     conn.close()
@@ -2168,6 +2186,7 @@ async def import_settlement(req: Request):
     db_users = {r["emp_id"]: dict(r) for r in cursor.fetchall()}
 
     target_team_clean = (target_team or "").strip()
+    target_team_set = set(t.strip() for t in target_team_clean.split(",") if t.strip()) if target_team_clean else set()
 
     try:
         with conn:
@@ -2188,15 +2207,15 @@ async def import_settlement(req: Request):
                 user_info = db_users.get(emp_id)
                 actual_team = team or (user_info["team"] if user_info else "")
 
-                # ★ 부서 현황에서 선택된 부서만 처리하고, 타 부서 데이터는 스킵
-                if target_team_clean and actual_team and actual_team != target_team_clean:
+                # ★ 부서 현황에서 선택된 부서만 처리하고, 타 부서 데이터는 스킵 (단일 또는 복수 부서 지원)
+                if target_team_set and actual_team and actual_team not in target_team_set:
                     skipped_other_dept += 1
                     continue
 
                 # 신규 사용자인 경우 users 테이블에 자동 등록 (FK 제약조건 보호)
                 if not user_info:
                     now_created = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    new_user_team = actual_team or target_team_clean or "미지정"
+                    new_user_team = actual_team or (list(target_team_set)[0] if len(target_team_set) == 1 else "미지정")
                     new_user_name = user_name or emp_id
                     cursor.execute("""
                         INSERT OR IGNORE INTO users (emp_id, name, team, position, is_admin, is_super, created_at)
@@ -2292,20 +2311,22 @@ def export_overtimes(req: ExportRequest):
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    query = "SELECT * FROM overtimes WHERE 1=1"
+    params = []
+
     if req.ids and len(req.ids) > 0:
         placeholders = ",".join("?" for _ in req.ids)
-        query = f"SELECT * FROM overtimes WHERE id IN ({placeholders}) ORDER BY start_date DESC, id DESC"
-        cursor.execute(query, req.ids)
-    else:
-        query = "SELECT * FROM overtimes WHERE 1=1"
-        params = []
-        if req.admin_emp_id:
-            cursor.execute("SELECT is_super, is_admin, team FROM users WHERE emp_id = ?", (req.admin_emp_id.strip(),))
-            caller = cursor.fetchone()
-            if caller and caller["is_super"] != 1 and caller["is_admin"] == 1:
-                req.team = caller["team"]
-                query += " AND emp_id NOT IN (SELECT emp_id FROM users WHERE is_super = 1)"
+        query += f" AND id IN ({placeholders})"
+        params.extend(req.ids)
 
+    if req.admin_emp_id:
+        cursor.execute("SELECT is_super, is_admin, team FROM users WHERE emp_id = ?", (req.admin_emp_id.strip(),))
+        caller = cursor.fetchone()
+        if caller and caller["is_super"] != 1 and caller["is_admin"] == 1:
+            req.team = caller["team"]
+            query += " AND emp_id NOT IN (SELECT emp_id FROM users WHERE is_super = 1)"
+
+    if not req.ids or len(req.ids) == 0:
         if req.start_date:
             query += " AND end_date >= ?"
             params.append(req.start_date.strip())
@@ -2313,8 +2334,14 @@ def export_overtimes(req: ExportRequest):
             query += " AND start_date <= ?"
             params.append(req.end_date.strip())
         if req.team:
-            query += " AND team = ?"
-            params.append(req.team.strip())
+            teams = [t.strip() for t in req.team.split(",") if t.strip()]
+            if len(teams) == 1:
+                query += " AND team = ?"
+                params.append(teams[0])
+            elif len(teams) > 1:
+                placeholders = ",".join("?" for _ in teams)
+                query += f" AND team IN ({placeholders})"
+                params.extend(teams)
         if req.category:
             query += " AND category = ?"
             params.append(req.category.strip())
@@ -2325,8 +2352,19 @@ def export_overtimes(req: ExportRequest):
             s = f"%{req.search.strip()}%"
             query += " AND (user_name LIKE ? OR emp_id LIKE ? OR project_no LIKE ? OR reason LIKE ?)"
             params.extend([s, s, s, s])
-        query += " ORDER BY start_date DESC, id DESC"
-        cursor.execute(query, params)
+    else:
+        if req.team:
+            teams = [t.strip() for t in req.team.split(",") if t.strip()]
+            if len(teams) == 1:
+                query += " AND team = ?"
+                params.append(teams[0])
+            elif len(teams) > 1:
+                placeholders = ",".join("?" for _ in teams)
+                query += f" AND team IN ({placeholders})"
+                params.extend(teams)
+
+    query += " ORDER BY start_date DESC, id DESC"
+    cursor.execute(query, params)
 
     records = [dict(r) for r in cursor.fetchall()]
     

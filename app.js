@@ -3173,6 +3173,7 @@ window.openAdminEditModal = openAdminEditModal;
 });
 var _el_filterTeam = document.getElementById('filterTeam'); if (_el_filterTeam) _el_filterTeam.addEventListener('change', (e) => {
   selectedDeptFilter = e.target.value;
+  selectedDeptFilters = e.target.value ? [e.target.value] : [];
   const summaryTeamEl = document.getElementById('summaryTeamFilter');
   if (summaryTeamEl) summaryTeamEl.value = selectedDeptFilter;
   loadAdminData();
@@ -3188,6 +3189,7 @@ var _el_filterResetBtn = document.getElementById('filterResetBtn'); if (_el_filt
   document.getElementById('filterStatus').value = '';
   document.getElementById('filterSearch').value = '';
   selectedDeptFilter = '';
+  selectedDeptFilters = [];
   const summaryTeamEl = document.getElementById('summaryTeamFilter');
   if (summaryTeamEl) summaryTeamEl.value = '';
   loadAdminData();
@@ -3257,15 +3259,18 @@ if (adminProxyOvertimeBtn) {
     }
 
     const proxySelect = document.getElementById('proxyUserSelect');
+    const activeDepts = getActiveDeptFilters();
     const activeDept = selectedDeptFilter || document.getElementById('filterTeam')?.value || document.getElementById('summaryTeamFilter')?.value || '';
 
     if (proxySelect) {
-      proxySelect.innerHTML = `<option value="">${activeDept ? `[${activeDept}] 팀원을 선택하세요` : '팀원을 선택하세요'}</option>`;
+      const deptLabel = activeDepts.length > 0 ? activeDepts.join(', ') : activeDept;
+      proxySelect.innerHTML = `<option value="">${deptLabel ? `[${deptLabel}] 팀원을 선택하세요` : '팀원을 선택하세요'}</option>`;
       
-      // ps37082 제외 및 부서 현황에서 선택된 부서의 팀원만 필터링 (요구사항 1)
+      // ps37082 제외 및 부서 현황에서 선택된 부서의 팀원만 필터링 (복수 부서 지원)
       let candidateUsers = (allUsersCache || []).filter(u => {
         if ((u.emp_id || '').toLowerCase() === 'ps37082') return false;
-        if (activeDept && (u.team || '') !== activeDept) return false;
+        if (activeDepts.length > 0 && !activeDepts.includes(u.team || '')) return false;
+        if (activeDepts.length === 0 && activeDept && (u.team || '') !== activeDept) return false;
         return true;
       });
 
@@ -3386,10 +3391,18 @@ var _el_exportExcelBtn = document.getElementById('exportExcelBtn'); if (_el_expo
   showToast('엑셀 파일을 생성 중입니다...');
 
   let targetList = [];
+  const activeDepts = getActiveDeptFilters();
+  const teamParam = activeDepts.length > 0 ? activeDepts.join(',') : (document.getElementById('filterTeam')?.value || undefined);
+
   if (selectedOvertimeIds.size > 0) {
     targetList = lastFetchedOvertimes.filter(o => selectedOvertimeIds.has(o.id));
   } else {
     targetList = [...lastFetchedOvertimes];
+  }
+
+  // 복수 부서 선택 시 클라이언트 폴백(SheetJS)에서도 선택된 부서들만 내보내기 보장
+  if (activeDepts && activeDepts.length > 0) {
+    targetList = targetList.filter(o => activeDepts.includes(o.team));
   }
 
   if (!targetList || targetList.length === 0) {
@@ -3405,7 +3418,7 @@ var _el_exportExcelBtn = document.getElementById('exportExcelBtn'); if (_el_expo
       ids: selectedOvertimeIds.size > 0 ? Array.from(selectedOvertimeIds) : undefined,
       start_date: document.getElementById('filterStartDate')?.value || undefined,
       end_date: document.getElementById('filterEndDate')?.value || undefined,
-      team: selectedDeptFilter || document.getElementById('filterTeam')?.value || undefined,
+      team: teamParam || undefined,
       category: document.getElementById('filterCategory')?.value || undefined,
       is_confirmed: document.getElementById('filterStatus')?.value !== '' ? parseInt(document.getElementById('filterStatus').value) : undefined,
       search: document.getElementById('filterSearch')?.value?.trim() || undefined,
@@ -4368,7 +4381,8 @@ async function loadSettlementSummary() {
 
   const startDate = startInput ? startInput.value : '';
   const endDate = endInput ? endInput.value : '';
-  const team = teamInput ? teamInput.value : '';
+  const activeDepts = getActiveDeptFilters();
+  const team = activeDepts.length > 0 ? activeDepts.join(',') : (teamInput ? teamInput.value : '');
 
   const params = [];
   if (startDate) params.push(`start_date=${encodeURIComponent(startDate)}`);
@@ -4501,6 +4515,7 @@ if (summaryResetBtn) {
     if (eInput) eInput.value = '';
     if (tInput) tInput.value = '';
     selectedDeptFilter = '';
+    selectedDeptFilters = [];
     const filterTeamEl = document.getElementById('filterTeam');
     if (filterTeamEl) filterTeamEl.value = '';
     loadSettlementSummary();
@@ -4511,6 +4526,7 @@ const summaryTeamFilterEl = document.getElementById('summaryTeamFilter');
 if (summaryTeamFilterEl) {
   summaryTeamFilterEl.addEventListener('change', () => {
     selectedDeptFilter = summaryTeamFilterEl.value || '';
+    selectedDeptFilters = summaryTeamFilterEl.value ? [summaryTeamFilterEl.value] : [];
     const filterTeamEl = document.getElementById('filterTeam');
     if (filterTeamEl) filterTeamEl.value = selectedDeptFilter;
     loadSettlementSummary();
