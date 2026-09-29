@@ -122,70 +122,68 @@ def draw_smart_pin(d, target_xy, pin_xy, badge_num, label_text, color="#ea580c",
 
 # ----------------- UI 목업 삽화 이미지 생성기들 (1600x1100 고해상도) -----------------
 
-# 1. 초기 접속 주소 및 3대 접속 경로 안내 목업
+# 1. 초기 접속 주소 및 웹 단일 접속 안내 목업 (PC 및 모바일)
 def create_mockup_access_methods():
-    """삽화: 3대 접속 경로 (사내 PC / 사외 HTTPS / 스마트폰 모바일 QR) 시각화"""
+    """삽화: 공식 웹주소 단일화 및 PC / 모바일 접속 가이드 시각화"""
     img = Image.new("RGB", (CANVAS_W, CANVAS_H), "#f8fafc")
     d = ImageDraw.Draw(img)
-    draw_browser_frame(d, title="★ 스마트 특근 관리 시스템  |  초기 접속 안내", url="https://overtime-system.internal")
+    draw_browser_frame(d, title="★ 스마트 특근 관리 시스템  |  공식 웹 접속 안내", url="https://team-overtime-manager.onrender.com/")
 
-    # 상단 안내 바
-    d.rounded_rectangle([40, 105, 1560, 180], radius=12, fill="#ffffff", outline="#cbd5e1", width=2)
-    d.text((70, 125), "🌐 어디서나 간편하게! 스마트 특근 관리 시스템 3대 접속 경로", font=get_font(26, bold=True), fill="#0f172a")
-    d.text((70, 155), "사내 PC, 사외 인터넷(LTE/노트북), 스마트폰 모바일 등 원하시는 경로로 언제 어디서든 접속하세요.", font=get_font(17), fill="#64748b")
+    # 상단 안내 및 공식 웹주소 하이라이트 박스
+    d.rounded_rectangle([40, 100, 1560, 240], radius=16, fill="#ffffff", outline="#2563eb", width=3)
+    d.text((70, 120), "🌐 스마트 특근 관리 시스템 공식 단일 웹 접속 주소", font=get_font(26, bold=True), fill="#0f172a")
+    d.text((70, 155), "별도 프로그램이나 VPN 설치 없이, PC 브라우저 및 스마트폰 모바일에서 동일한 공식 주소로 즉시 접속하세요.", font=get_font(16), fill="#64748b")
+
+    # 웹주소 터치/클릭 배너
+    d.rounded_rectangle([70, 182, 1150, 226], radius=8, fill="#0f172a")
+    d.text((95, 204), "🔗 공식 웹주소:  https://team-overtime-manager.onrender.com/", font=get_font(18, bold=True), fill="#38bdf8", anchor="lm")
+    d.rounded_rectangle([1170, 182, 1530, 226], radius=8, fill="#10b981")
+    d.text((1350, 204), "🚀 클릭 시 즉시 연결 (PC / 모바일 공용)", font=get_font(16, bold=True), fill="#ffffff", anchor="mm")
 
     cards = [
-        ("🖥️ 사내 PC 접속 (회사 내부망)",
+        ("🖥️ 사내 / 자택 PC 브라우저 접속 안내",
          "#eff6ff", "#3b82f6",
-         "회사 PC 브라우저(Chrome/Edge) 주소창 입력",
-         "http://192.168.1.50:8000",
-         ["① 회사 업무용 PC에서 웹 브라우저 실행",
-          "② 주소창에 위 사내 IP 주소 입력",
-          "③ 브라우저 [즐겨찾기 ★] 등록 시 매번 원클릭!",
-          "※ 회사 Wi-Fi 또는 사내 유선랜 연결 시 즉시 작동"],
-         "① 사내 PC는 내부 IP 입력"),
+         "사내 업무 PC, 자택 PC, 외부 노트북 (Chrome / Edge / Whale)",
+         "https://team-overtime-manager.onrender.com/",
+         ["① PC 웹 브라우저(Chrome, Edge 등)를 실행합니다.",
+          "② 주소창에 공식 웹주소를 입력하거나 즐겨찾기를 클릭합니다.",
+          "③ 브라우저 [즐겨찾기 ★] 등록 시 매번 원클릭으로 바로 진입!",
+          "④ 회사 사내망은 물론 자택/출장지 어디서나 자유롭게 연결",
+          "※ 별도 프로그램이나 플러그인 설치 없이 1초 만에 로딩 완료"],
+         "① PC는 브라우저 주소 입력 및 즐겨찾기 등록"),
 
-        ("🌐 사외 원격 접속 (자택 / LTE / 출장)",
+        ("📱 스마트폰 모바일 접속 안내 (Android / iPhone)",
          "#ecfdf5", "#10b981",
-         "관리자가 공유한 24시간 보안 HTTPS 링크 클릭",
-         "https://xxxx.trycloudflare.com",
-         ["① 공유받은 보안 HTTPS 링크를 브라우저에 입력",
-          "② 별도 VPN이나 프로그램 설치 없이 1초 연결",
-          "③ 전송 암호화(SSL)로 사외에서도 안전 통신",
-          "※ 자택 PC, 외부 노트북, 공용 태블릿 모두 지원"],
-         "② 사외는 HTTPS 보안 링크 클릭"),
-
-        ("📱 스마트폰 모바일 (LTE / 5G 어디서나)",
-         "#fef3c7", "#f59e0b",
-         "화면 상단 [모바일 접속 QR]을 카메라로 스캔",
-         "스마트폰 기본 카메라로 QR 코드 비추기!",
-         ["① PC 화면 상단 [📱 모바일 접속 QR] 클릭",
-          "② 스마트폰 기본 카메라로 QR 코드를 비춤",
-          "③ 화면에 뜨는 링크 터치 즉시 모바일 웹 오픈!",
-          "★ [홈 화면에 추가] 누르면 전용 앱으로 등록!"],
-         "③ 스마트폰은 상단 QR 카메라 스캔")
+         "갤럭시, 아이폰, 아이패드, 태블릿 (모바일 반응형 자동 최적화)",
+         "https://team-overtime-manager.onrender.com/",
+         ["① 스마트폰 기본 브라우저(Safari, Chrome, 삼성인터넷) 실행",
+          "② 주소창에 동일한 공식 웹주소 입력 (또는 전달받은 링크 터치)",
+          "③ 모바일 터치에 최적화된 깔끔한 화면이 자동으로 펼쳐집니다.",
+          "★ 브라우저 메뉴 [홈 화면에 추가] 터치 시 전용 앱 아이콘 생성!",
+          "※ 언제 어디서나 출퇴근길/휴일에도 간편하게 특근 신청 및 확인"],
+         "② 모바일은 스마트폰 브라우저 접속 후 홈 화면 추가")
     ]
 
-    card_w = 480
+    card_w = 735
     card_gap = 30
     start_x = 45
 
     for i, (title, bg_c, border_c, sub_head, url_sample, steps, pin_label) in enumerate(cards):
         cx = start_x + i * (card_w + card_gap)
-        cy = 205
-        ch = 760
+        cy = 260
+        ch = 700
 
         d.rounded_rectangle([cx, cy, cx + card_w, cy + ch], radius=16, fill="#ffffff", outline=border_c, width=3)
         d.rounded_rectangle([cx, cy, cx + card_w, cy + 85], radius=14, fill=bg_c)
-        d.text((cx + card_w // 2, cy + 42), title, font=get_font(21, bold=True), fill="#0f172a", anchor="mm")
+        d.text((cx + card_w // 2, cy + 42), title, font=get_font(22, bold=True), fill="#0f172a", anchor="mm")
 
-        d.rounded_rectangle([cx + 25, cy + 105, cx + card_w - 25, cy + 205], radius=10, fill="#f8fafc", outline="#cbd5e1", width=2)
-        d.text((cx + 40, cy + 120), sub_head, font=get_font(15, bold=True), fill="#64748b")
-        d.rounded_rectangle([cx + 35, cy + 148, cx + card_w - 35, cy + 192], radius=6, fill="#0f172a")
-        d.text((cx + card_w // 2, cy + 170), url_sample, font=get_font(16, bold=True), fill="#38bdf8", anchor="mm")
+        d.rounded_rectangle([cx + 25, cy + 100, cx + card_w - 25, cy + 195], radius=10, fill="#f8fafc", outline="#cbd5e1", width=2)
+        d.text((cx + 40, cy + 118), sub_head, font=get_font(15, bold=True), fill="#64748b")
+        d.rounded_rectangle([cx + 35, cy + 142, cx + card_w - 35, cy + 185], radius=6, fill="#0f172a")
+        d.text((cx + card_w // 2, cy + 163), url_sample, font=get_font(17, bold=True), fill="#38bdf8", anchor="mm")
 
         for s_idx, step_text in enumerate(steps):
-            sy = cy + 235 + s_idx * 90
+            sy = cy + 210 + s_idx * 90
             d.rounded_rectangle([cx + 25, sy, cx + card_w - 25, sy + 75], radius=8, fill="#f8fafc", outline="#e2e8f0")
             if "★" in step_text:
                 d.text((cx + 40, sy + 37), step_text, font=get_font(16, bold=True), fill="#b45309", anchor="lm")
@@ -194,11 +192,11 @@ def create_mockup_access_methods():
             else:
                 d.text((cx + 40, sy + 37), step_text, font=get_font(16, bold=True), fill="#1e293b", anchor="lm")
 
-        draw_smart_pin(d, (cx + card_w // 2, cy + 170), (cx + card_w // 2, cy + 680), f"0{i+1}", pin_label, color=border_c)
+        draw_smart_pin(d, (cx + card_w // 2, cy + 163), (cx + card_w // 2, cy + 630), f"0{i+1}", pin_label, color=border_c)
 
-    d.rounded_rectangle([40, 985, 1560, 1070], radius=12, fill="#eff6ff", outline="#93c5fd", width=2)
-    d.text((70, 1012), "★ 핵심 알림: 모든 접속 경로는 동일한 데이터베이스(DB)로 100% 실시간 연동됩니다.", font=get_font(20, bold=True), fill="#1d4ed8")
-    d.text((70, 1042), "스마트폰에서 신청한 내역을 회사 PC에서 열어도, 반대로 PC에서 신청한 내역을 폰에서 열어도 동일하게 유지됩니다.", font=get_font(16), fill="#2563eb")
+    d.rounded_rectangle([40, 980, 1560, 1070], radius=12, fill="#eff6ff", outline="#93c5fd", width=2)
+    d.text((70, 1008), "★ 핵심 알림: PC와 스마트폰은 동일한 클라우드 DB로 100% 실시간 연동됩니다.", font=get_font(20, bold=True), fill="#1d4ed8")
+    d.text((70, 1038), "어디서 접속하든 본인 사원번호 6자리만 입력하면 모든 신청 내역 및 승인 상태가 실시간으로 일치합니다.", font=get_font(16), fill="#2563eb")
 
     path = IMG_DIR / "mockup_access_methods.png"
     img.save(path)
@@ -931,7 +929,7 @@ def create_mockup_excel_27():
 
 # ----------------- 슬라이드 템플릿 헬퍼 -----------------
 
-def add_visual_slide(prs, step_no, title, subtitle, items, img_path):
+def add_visual_slide(prs, step_no, title, subtitle, items, img_path, hyperlink_url=None):
     """
     와이드스크린 16:9 슬라이드 레이아웃 (그림 중심 대형 배치):
     - 좌측: 핵심 요약 카드 (너비 3.5인치, 글자 수 대폭 축소 & 1~2줄 행동 요령 압축)
@@ -966,7 +964,8 @@ def add_visual_slide(prs, step_no, title, subtitle, items, img_path):
     card_box.fill.fore_color.rgb = COLOR_BG_CARD
     card_box.line.color.rgb = COLOR_BORDER
 
-    card_tb = slide.shapes.add_textbox(Inches(0.75), Inches(1.6), Inches(3.2), Inches(5.4))
+    card_tb_h = Inches(4.7) if hyperlink_url else Inches(5.4)
+    card_tb = slide.shapes.add_textbox(Inches(0.75), Inches(1.55), Inches(3.2), card_tb_h)
     ctf = card_tb.text_frame
     ctf.word_wrap = True
 
@@ -979,13 +978,54 @@ def add_visual_slide(prs, step_no, title, subtitle, items, img_path):
         p_it.space_after = Pt(2)
 
         p_id = ctf.add_paragraph()
-        p_id.text = item_desc
-        p_id.font.size = Pt(10.5)
-        p_id.font.color.rgb = COLOR_TEXT_MAIN
-        p_id.space_after = Pt(8)
+        if hyperlink_url and hyperlink_url in item_desc:
+            parts = item_desc.split(hyperlink_url)
+            if parts[0]:
+                r0 = p_id.add_run()
+                r0.text = parts[0]
+                r0.font.size = Pt(10.5)
+                r0.font.color.rgb = COLOR_TEXT_MAIN
+            r_link = p_id.add_run()
+            r_link.text = hyperlink_url
+            r_link.font.size = Pt(10.5)
+            r_link.font.bold = True
+            r_link.font.color.rgb = RGBColor(37, 99, 235)
+            r_link.font.underline = True
+            r_link.hyperlink.address = hyperlink_url
+            if len(parts) > 1 and parts[1]:
+                r1 = p_id.add_run()
+                r1.text = parts[1]
+                r1.font.size = Pt(9.5)
+                r1.font.color.rgb = COLOR_TEXT_MUTED
+        else:
+            p_id.text = item_desc
+            p_id.font.size = Pt(10.5)
+            p_id.font.color.rgb = COLOR_TEXT_MAIN
+        p_id.space_after = Pt(6)
+
+    # 클릭 시 웹페이지로 바로 이동하는 하이퍼링크 버튼
+    if hyperlink_url:
+        btn_box = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.75), Inches(6.38), Inches(3.2), Inches(0.62))
+        btn_box.fill.solid()
+        btn_box.fill.fore_color.rgb = RGBColor(30, 58, 138)
+        btn_box.line.color.rgb = RGBColor(234, 88, 12)
+        btn_box.line.width = Pt(1.5)
+        btn_box.click_action.hyperlink.address = hyperlink_url
+        btf = btn_box.text_frame
+        btf.word_wrap = False
+        bp = btf.paragraphs[0]
+        bp.alignment = PP_ALIGN.CENTER
+        brun = bp.add_run()
+        brun.text = "🌐 웹페이지 바로 접속하기 (클릭)"
+        brun.font.size = Pt(12)
+        brun.font.bold = True
+        brun.font.color.rgb = RGBColor(255, 255, 255)
+        brun.hyperlink.address = hyperlink_url
 
     if os.path.exists(img_path):
-        slide.shapes.add_picture(img_path, Inches(4.3), Inches(1.45), width=Inches(8.5), height=Inches(5.7))
+        pic = slide.shapes.add_picture(img_path, Inches(4.3), Inches(1.45), width=Inches(8.5), height=Inches(5.7))
+        if hyperlink_url:
+            pic.click_action.hyperlink.address = hyperlink_url
     return slide
 
 
@@ -1036,12 +1076,12 @@ def build_user_presentation(images):
 
     # --- SLIDE 2: STEP 01 - 초기 접속 주소 및 방법 ---
     s2_data = [
-        ("① 사내 PC 접속 (회사 랜선/Wi-Fi)", "사내 PC 브라우저(Chrome/Edge) 주소창에 사내 IP 주소를 입력합니다. [즐겨찾기 ★] 등록 시 매번 원클릭!"),
-        ("② 사외 원격 접속 (자택/LTE/출장)", "관리자가 공유한 보안 링크(https://xxxx.trycloudflare.com)를 클릭하여 어디서나 접속합니다."),
-        ("③ 스마트폰 모바일 (원클릭 QR)", "화면 상단 [📱 모바일 접속 QR]을 스마트폰 기본 카메라로 비추면 1초 만에 모바일 웹이 열립니다."),
-        ("★ 100% 실시간 DB 자동 동기화", "PC, 사외, 스마트폰 어디서 접속하든 본인 사번만 입력하면 동일한 데이터가 완벽 동기화됩니다.")
+        ("🌐 통합 웹 접속 공식 주소", "https://team-overtime-manager.onrender.com/\n(주소 클릭 시 시스템 웹페이지로 즉시 이동합니다.)"),
+        ("🖥️ PC 브라우저 접속 (사내 / 자택)", "Chrome, Edge 등 웹 브라우저를 열고 위 주소를 입력하여 접속합니다. [즐겨찾기 ★] 등록 시 매번 원클릭으로 열 수 있습니다."),
+        ("📱 스마트폰 모바일 접속 (LTE / 5G / Wi-Fi)", "스마트폰 기본 브라우저(Safari, Chrome, 삼성인터넷)로 접속하시면 모바일 최적화 화면이 자동으로 지원됩니다."),
+        ("★ 모바일 홈 화면 바로가기 추가 팁", "스마트폰 브라우저 메뉴(⋮ 또는 공유)에서 [홈 화면에 추가]를 누르면 전용 앱 아이콘처럼 1초 만에 실행됩니다.")
     ]
-    add_visual_slide(prs, "01", "초기 접속 주소 및 3대 접속 경로 안내", "사내 업무 PC, 사외 인터넷, 스마트폰 모바일 중 편한 경로로 접속하세요.", s2_data, images["access"])
+    add_visual_slide(prs, "01", "스마트 특근 시스템 공식 웹 접속 안내", "PC, 노트북, 스마트폰 모바일 어디서나 공식 웹주소 하나로 간편하게 접속하세요.", s2_data, images["access"], hyperlink_url="https://team-overtime-manager.onrender.com/")
 
     # --- SLIDE 3: STEP 02 - 사원번호로 간편 로그인 방법 ---
     s3_data = [
@@ -1317,12 +1357,12 @@ def create_manual():
     p_cov_auth.font.color.rgb = RGBColor(148, 163, 184)
 
     # 사용자 가이드 슬라이드 7개 추가
-    add_visual_slide(prs_system, "01", "초기 접속 주소 및 3대 접속 경로 안내", "사내 업무 PC, 사외 인터넷, 스마트폰 모바일 중 편한 경로로 접속하세요.", [
-        ("① 사내 PC 접속 (회사 랜선/Wi-Fi)", "사내 PC 브라우저(Chrome/Edge) 주소창에 사내 IP 주소를 입력합니다. [즐겨찾기 ★] 등록 시 매번 원클릭!"),
-        ("② 사외 원격 접속 (자택/LTE/출장)", "관리자가 공유한 보안 링크(https://xxxx.trycloudflare.com)를 클릭하여 어디서나 접속합니다."),
-        ("③ 스마트폰 모바일 (원클릭 QR)", "화면 상단 [📱 모바일 접속 QR]을 스마트폰 기본 카메라로 비추면 1초 만에 모바일 웹이 열립니다."),
-        ("★ 100% 실시간 DB 자동 동기화", "PC, 사외, 스마트폰 어디서 접속하든 본인 사번만 입력하면 동일한 데이터가 완벽 동기화됩니다.")
-    ], images["access"])
+    add_visual_slide(prs_system, "01", "스마트 특근 시스템 공식 웹 접속 안내", "PC, 노트북, 스마트폰 모바일 어디서나 공식 웹주소 하나로 간편하게 접속하세요.", [
+        ("🌐 통합 웹 접속 공식 주소", "https://team-overtime-manager.onrender.com/\n(주소 클릭 시 시스템 웹페이지로 즉시 이동합니다.)"),
+        ("🖥️ PC 브라우저 접속 (사내 / 자택)", "Chrome, Edge 등 웹 브라우저를 열고 위 주소를 입력하여 접속합니다. [즐겨찾기 ★] 등록 시 매번 원클릭으로 열 수 있습니다."),
+        ("📱 스마트폰 모바일 접속 (LTE / 5G / Wi-Fi)", "스마트폰 기본 브라우저(Safari, Chrome, 삼성인터넷)로 접속하시면 모바일 최적화 화면이 자동으로 지원됩니다."),
+        ("★ 모바일 홈 화면 바로가기 추가 팁", "스마트폰 브라우저 메뉴(⋮ 또는 공유)에서 [홈 화면에 추가]를 누르면 전용 앱 아이콘처럼 1초 만에 실행됩니다.")
+    ], images["access"], hyperlink_url="https://team-overtime-manager.onrender.com/")
 
     add_visual_slide(prs_system, "02", "사원번호로 초간편 1초 입장하기", "복잡한 비밀번호 없이 사번 6자리 입력만으로 빠르고 안전하게 입장합니다.", [
         ("① 사원번호 6자리 숫자 입력", "비밀번호 없이 본인 사원번호 6자리를 입력창에 입력합니다."),
